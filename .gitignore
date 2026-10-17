@@ -1,0 +1,33 @@
+# Build outputs and anything generated from game files - never commit these.
+build/
+build-*/
+generated/
+dist/
+ios-deps
+ios/local.env
+*.app
+*.ipa
+*.log
+.venv/
+__pycache__/
+*.pyc
+.DS_Store
+
+# App icon: bring your own (see README).
+ios/assets/Assets.xcassets/AppIcon.appiconset/*.png
+
+# Game files and keys, in case one is copied in by accident.
+/game/
+*.rpx
+*.rpl
+*.wud
+*.wux
+*.key
+*.tik
+*.tmd
+*.h3
+*.sarc
+*.pack
+*.sbfres
+*.bfres
+keys.txt

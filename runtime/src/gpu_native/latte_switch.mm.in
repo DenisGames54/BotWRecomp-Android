@@ -1,0 +1,114 @@
+// GENERATED from runtime/src/gpu_native/latte_switch.mm.in by gpu_native.cmake (BOTW_NATIVE_GPU=ON only).
+//
+// Puts a run-time switch in front of the latte:: interface (runtime/src/latte/latte.h) without
+// editing the Cemu glue: runtime/cemu_shims/latte_glue.mm is compiled here (in Cemu's environment,
+// replacing its own TU in the cemu_gpu target) with the functions the native backend overrides
+// renamed to latte::latte_cemu_*; the real names below forward to either the Cemu version (default)
+// or gpu_native::backend:: (--renderer native). Functions not in the list (e.g. new display
+// settings the glue gains) keep Cemu's implementation in both modes, so the native build keeps
+// linking when latte.h grows. The PM4 statistics tap (--gpu-stats N) sees every submission.
+
+// Everything latte_glue.mm includes, so the renames below only touch the glue itself and latte.h.
+#include <TargetConditionals.h>
+#if TARGET_OS_IOS
+#import <Foundation/Foundation.h>
+#import <CoreGraphics/CoreGraphics.h>
+#else
+#import <AppKit/AppKit.h>
+#endif
+#import <ImageIO/ImageIO.h>
+#import <UniformTypeIdentifiers/UniformTypeIdentifiers.h>
+#include <condition_variable>
+#include <deque>
+#include <functional>
+#include "Cafe/HW/Latte/Core/Latte.h"
+#include "Cafe/HW/Latte/Core/LattePM4.h"
+#include "Cafe/HW/Latte/Renderer/Metal/MetalRenderer.h"
+#include "Cafe/HW/Latte/Renderer/Metal/LatteTextureMtl.h"
+#include "Cafe/OS/libs/TCL/TCL.h"
+#include "Cafe/OS/libs/coreinit/coreinit_Time.h"
+#include "Cafe/OS/libs/gx2/GX2_Event.h"
+#include "WindowSystem.h"
+#include "config/CemuConfig.h"
+
+#define create_renderer latte_cemu_create_renderer
+#define resize_window latte_cemu_resize_window
+#define set_scanout_srgb latte_cemu_set_scanout_srgb
+#define set_display_mode latte_cemu_set_display_mode
+#define init latte_cemu_init
+#define set_capture latte_cemu_set_capture
+#define submit latte_cemu_submit
+#define last_submitted latte_cemu_last_submitted
+#define retired latte_cemu_retired
+#define wait_retired latte_cemu_wait_retired
+#define flip_requests latte_cemu_flip_requests
+#define flips_executed latte_cemu_flips_executed
+#define add_flip_request latte_cemu_add_flip_request
+#define wait_for_flip latte_cemu_wait_for_flip
+#define wait_for_vsync latte_cemu_wait_for_vsync
+#define last_flip_time latte_cemu_last_flip_time
+#define last_vsync_time latte_cemu_last_vsync_time
+#define swap_interval latte_cemu_swap_interval
+#define set_swap_interval latte_cemu_set_swap_interval
+#define set_event_sink latte_cemu_set_event_sink
+#include "@CMAKE_SOURCE_DIR@/runtime/cemu_shims/latte_glue.mm"
+#undef create_renderer
+#undef resize_window
+#undef set_scanout_srgb
+#undef set_display_mode
+#undef init
+#undef set_capture
+#undef submit
+#undef last_submitted
+#undef retired
+#undef wait_retired
+#undef flip_requests
+#undef flips_executed
+#undef add_flip_request
+#undef wait_for_flip
+#undef wait_for_vsync
+#undef last_flip_time
+#undef last_vsync_time
+#undef swap_interval
+#undef set_swap_interval
+#undef set_event_sink
+
+#include "@CMAKE_SOURCE_DIR@/runtime/src/gpu_native/gpu_native.h"
+
+namespace latte {
+namespace nb = gpu_native::backend;
+static bool native() {
+    static const bool n = gpu_native::native_selected();
+    return n;
+}
+
+void create_renderer(void* nsview, int w, int h) {
+    if (native()) nb::create_renderer(nsview, w, h);
+    else latte_cemu_create_renderer(nsview, w, h);
+}
+void resize_window(int w, int h) { native() ? nb::resize_window(w, h) : latte_cemu_resize_window(w, h); }
+void set_scanout_srgb(bool tv, bool srgb) { native() ? nb::set_scanout_srgb(tv, srgb) : latte_cemu_set_scanout_srgb(tv, srgb); }
+void set_display_mode(int mode) { native() ? nb::set_display_mode(mode) : latte_cemu_set_display_mode(mode); }
+void init() { native() ? nb::init() : latte_cemu_init(); }
+void set_capture(int every, const char* dir) { native() ? nb::set_capture(every, dir) : latte_cemu_set_capture(every, dir); }
+uint64_t submit(uint32_t addr, uint32_t ndw) {
+    if (gpu_native::stats_interval()) gpu_native::stats_observe(addr, ndw);
+    return native() ? nb::submit(addr, ndw) : latte_cemu_submit(addr, ndw);
+}
+uint64_t last_submitted() { return native() ? nb::last_submitted() : latte_cemu_last_submitted(); }
+uint64_t retired() { return native() ? nb::retired() : latte_cemu_retired(); }
+void wait_retired(uint64_t ts) { native() ? nb::wait_retired(ts) : latte_cemu_wait_retired(ts); }
+uint32_t flip_requests() { return native() ? nb::flip_requests() : latte_cemu_flip_requests(); }
+uint32_t flips_executed() { return native() ? nb::flips_executed() : latte_cemu_flips_executed(); }
+void add_flip_request() { native() ? nb::add_flip_request() : latte_cemu_add_flip_request(); }
+void wait_for_flip() { native() ? nb::wait_for_flip() : latte_cemu_wait_for_flip(); }
+void wait_for_vsync() { native() ? nb::wait_for_vsync() : latte_cemu_wait_for_vsync(); }
+uint64_t last_flip_time() { return native() ? nb::last_flip_time() : latte_cemu_last_flip_time(); }
+uint64_t last_vsync_time() { return native() ? nb::last_vsync_time() : latte_cemu_last_vsync_time(); }
+uint32_t swap_interval() { return native() ? nb::swap_interval() : latte_cemu_swap_interval(); }
+void set_swap_interval(uint32_t v) { native() ? nb::set_swap_interval(v) : latte_cemu_set_swap_interval(v); }
+void set_event_sink(std::function<void(Event)> sink) {
+    if (native()) nb::set_event_sink([sink](uint32_t e) { sink((Event)e); });
+    else latte_cemu_set_event_sink(std::move(sink));
+}
+}  // namespace latte
