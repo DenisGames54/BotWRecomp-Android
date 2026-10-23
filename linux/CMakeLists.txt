@@ -1,0 +1,70 @@
+cmake_minimum_required(VERSION 3.24)
+project(BotWRecompLinux LANGUAGES C CXX)
+get_filename_component(ROOT "${CMAKE_CURRENT_SOURCE_DIR}/.." ABSOLUTE)
+set(CMAKE_CXX_STANDARD 20)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+if(NOT CMAKE_BUILD_TYPE)
+  set(CMAKE_BUILD_TYPE Release)
+endif()
+set(BOTW_CPU "cortex-a710" CACHE STRING "-mcpu for generated code")
+
+# generated guest code (tools/recompile.py)
+file(GLOB GUEST_SOURCES CONFIGURE_DEPENDS ${ROOT}/generated/fn_*.cpp ${ROOT}/generated/big_*.cpp
+  ${ROOT}/generated/huge_*.cpp ${ROOT}/generated/table.cpp ${ROOT}/generated/hle_stubs.cpp)
+file(GLOB BIG_SOURCES CONFIGURE_DEPENDS ${ROOT}/generated/big_*.cpp)
+file(GLOB HUGE_SOURCES CONFIGURE_DEPENDS ${ROOT}/generated/huge_*.cpp)
+if(GUEST_SOURCES)
+  add_library(guest OBJECT ${GUEST_SOURCES})
+  target_include_directories(guest PRIVATE ${ROOT}/runtime/include ${ROOT}/generated)
+  target_compile_options(guest PRIVATE -O2 -w -fwrapv -fno-strict-aliasing -ffp-contract=off -mcpu=${BOTW_CPU})
+  set_source_files_properties(${BIG_SOURCES} PROPERTIES COMPILE_OPTIONS "-O1")
+  set_source_files_properties(${HUGE_SOURCES} PROPERTIES COMPILE_OPTIONS "-O0")
+else()
+  message(WARNING "generated/ is empty: only cemu_gpu will build (run tools/recompile.py first)")
+endif()
+
+# vendored Cemu Latte layer (Vulkan)
+file(GLOB_RECURSE CEMU_SOURCES CONFIGURE_DEPENDS
+  ${ROOT}/runtime/cemu/Cafe/*.cpp ${ROOT}/runtime/cemu/Common/*.cpp ${ROOT}/runtime/cemu/util/*.cpp
+  ${ROOT}/runtime/cemu/Cemu/FileCache/*.cpp ${ROOT}/runtime/cemu/imgui/*.cpp
+  ${ROOT}/runtime/cemu_shims/*.cpp)
+list(FILTER CEMU_SOURCES EXCLUDE REGEX "LatteOverlay\\.cpp$|/dependencies/|SystemInfo(Win|Mac|BSD)\\.cpp$|/Renderer/Metal/|MetalCppImpl|imgui_impl_metal|LatteDecompilerEmitMSL")
+foreach(f imgui imgui_draw imgui_tables imgui_widgets)
+  list(APPEND CEMU_SOURCES ${ROOT}/runtime/cemu/dependencies/imgui/${f}.cpp)
+endforeach()
+add_library(cemu_gpu OBJECT ${CEMU_SOURCES})
+target_include_directories(cemu_gpu PRIVATE ${ROOT}/linux/compat ${ROOT}/runtime/cemu_shims ${ROOT}/runtime/cemu
+  ${ROOT}/runtime/cemu/Cafe ${ROOT}/runtime/cemu/dependencies/imgui ${ROOT}/runtime/cemu/dependencies)
+target_compile_definitions(cemu_gpu PRIVATE BOOST_NOWIDE_NO_LIB ENABLE_VULKAN=1 VK_NO_PROTOTYPES BOTWRECOMP
+  VK_USE_PLATFORM_XLIB_KHR VK_USE_PLATFORM_XCB_KHR VK_USE_PLATFORM_WAYLAND_KHR
+  EMULATOR_VERSION_MAJOR=2 EMULATOR_VERSION_MINOR=6 EMULATOR_VERSION_PATCH=0 EMULATOR_HASH=a53cf0e)
+target_compile_options(cemu_gpu PRIVATE -w -O2 -flax-vector-conversions -mcpu=${BOTW_CPU}
+  "SHELL:-include vk_platform_compat.h" "SHELL:-include Common/precompiled.h")
+
+# runtime
+file(GLOB_RECURSE RUNTIME_SOURCES CONFIGURE_DEPENDS ${ROOT}/runtime/src/*.cpp)
+list(FILTER RUNTIME_SOURCES EXCLUDE REGEX "/gpu_native/")
+find_package(SDL3 REQUIRED CONFIG)
+find_package(fmt REQUIRED)
+find_package(ZLIB REQUIRED)
+find_package(OpenSSL REQUIRED)
+find_package(Threads REQUIRED)
+find_package(glslang CONFIG)
+find_library(ZSTD zstd REQUIRED)
+set(LIBS SDL3::SDL3 fmt::fmt ZLIB::ZLIB OpenSSL::Crypto Threads::Threads ${ZSTD} ${CMAKE_DL_LIBS})
+foreach(t glslang::glslang glslang::SPIRV glslang::glslang-default-resource-limits glslang::MachineIndependent glslang::GenericCodeGen)
+  if(TARGET ${t})
+    list(APPEND LIBS ${t})
+  endif()
+endforeach()
+if(NOT TARGET glslang::glslang)
+  list(APPEND LIBS glslang SPIRV)
+endif()
+target_link_libraries(cemu_gpu PRIVATE SDL3::SDL3 fmt::fmt ZLIB::ZLIB OpenSSL::Crypto)
+
+if(GUEST_SOURCES)
+  add_executable(BotWRecomp ${RUNTIME_SOURCES} $<TARGET_OBJECTS:guest> $<TARGET_OBJECTS:cemu_gpu>)
+  target_include_directories(BotWRecomp PRIVATE ${ROOT}/linux/compat ${ROOT}/runtime/include ${ROOT}/runtime/src ${ROOT}/generated)
+  target_compile_options(BotWRecomp PRIVATE -Wall -Wno-unused-function -Wno-unused-variable -fwrapv -mcpu=${BOTW_CPU})
+  target_link_libraries(BotWRecomp PRIVATE ${LIBS})
+endif()

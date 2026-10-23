@@ -1,5 +1,5 @@
 // BotWRecomp: small symbols the vendored GPU code expects from parts of Cemu that are not vendored.
-#include <mach/mach_time.h>
+#include <time.h>
 
 #include "Cafe/HW/Latte/Core/LatteOverlay.h"
 
@@ -14,6 +14,6 @@ std::atomic_uint64_t g_compiling_pipelines_syncTimeSum = 0;
 MPTR coreinit_allocFromSysArea(uint32 size, uint32 alignment) { return mem::sys_alloc(size, alignment < 16 ? 16 : alignment); }
 void coreinit_freeToSysArea(MPTR mem) { mem::sys_free(mem); }
 
-uint64 PPCTimer_getRawTsc() { return mach_absolute_time(); }
+uint64 PPCTimer_getRawTsc() { timespec ts; clock_gettime(CLOCK_MONOTONIC, &ts); return (uint64)ts.tv_sec * 1000000000ull + ts.tv_nsec; }
 
 void LatteOverlay_pushNotification(const std::string& msg, sint32) { log_write("[gpu] %s", msg.c_str()); }

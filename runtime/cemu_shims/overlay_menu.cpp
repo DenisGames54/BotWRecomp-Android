@@ -25,7 +25,7 @@ std::atomic<int> g_draws{0};
 }  // namespace
 
 // Cemu's GPU thread (LatteThread), for the host loop's slow-frame sampler (window.mm).
-std::atomic<pthread_t> g_gpu_thread{nullptr};
+std::atomic<pthread_t> g_gpu_thread{(pthread_t)0};
 
 void LatteOverlay_updateStats(double fps, sint32 drawcalls, sint32 fastDrawcalls) {
     g_gpu_thread = pthread_self();  // stats are updated on the GPU thread
