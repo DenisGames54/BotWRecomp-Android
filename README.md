@@ -1,6 +1,6 @@
-# BotW Recompiled: Android / Linux ARM64 (unofficial)
+# BotW Recompiled: Android (unofficial)
 
-An unofficial **Android / Linux ARM64 port** of [BotWRecomp](https://github.com/IshaanKalra2103/BotWRecomp)
+An unofficial **Android port** of [BotWRecomp](https://github.com/IshaanKalra2103/BotWRecomp)
 by Ishaan Kalra, which statically recompiles the PowerPC code of **The Legend of Zelda: Breath of the
 Wild (Wii U)** to C++ and runs it on a Cafe OS runtime written for the project.
 
@@ -25,7 +25,7 @@ it runs on Android phones with a Vulkan driver (tested on Turnip / Adreno).
 Early and experimental. Everything below was tested on a single device:
 
 - **Device:** POCO F5 (Snapdragon 7+ Gen 2, Adreno 725)
-- **Environment:** Debian ARM64 inside a [DroidSpaces](https://github.com/ShubhamPatilsd/droidspaces) container on Android
+- **Environment:** Debian ARM64 inside a [DroidSpaces](https://github.com/ravindu644/droidspaces-oss) container on Android
 - **GPU driver:** Mesa Turnip (Vulkan 1.4)
 
 What works:
