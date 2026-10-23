@@ -1,3 +1,4 @@
+#include <array>
 // BotWRecomp shim: the subset of Cemu's configuration the vendored GPU code reads, fixed defaults.
 #pragma once
 #include <stdint.h>
@@ -35,5 +36,7 @@ struct CemuConfig {
     } overlay;
     GraphicAPI graphic_api = GraphicAPI::kMetal;
     uint64_t mtl_graphic_device_uuid = 0;
+    std::array<uint8_t, 16> vk_graphic_device_uuid{};
+    struct { int v = 1; int GetValue() const { return v; } } vsync;
 };
 CemuConfig& GetConfig();

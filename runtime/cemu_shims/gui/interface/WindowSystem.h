@@ -13,6 +13,8 @@ enum struct PlatformKeyCodes : uint32_t { LCONTROL, RCONTROL, TAB, ESCAPE };
 struct WindowInfo {
     WindowHandleInfo window_main;
     WindowHandleInfo window_pad;
+    WindowHandleInfo canvas_main;  // Vulkan build: surface = SDL_Window*
+    WindowHandleInfo canvas_pad;
 };
 WindowInfo& GetWindowInfo();
 void GetWindowPhysSize(int& w, int& h);
