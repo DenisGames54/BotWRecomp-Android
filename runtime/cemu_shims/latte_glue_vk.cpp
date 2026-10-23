@@ -98,6 +98,10 @@ void create_renderer(void* sdl_window, int w, int h) {
     wi.window_main.surface = sdl_window;
     wi.canvas_main.surface = sdl_window;
     wi.window_main.backend = wi.canvas_main.backend = WindowSystem::WindowHandleInfo::Backend::X11;
+    if (!InitializeGlobalVulkan()) {
+        fprintf(stderr, "Vulkan loader (libvulkan.so.1) not available\n");
+        abort();
+    }
     g_renderer = std::make_unique<VulkanRenderer>();
     VulkanRenderer::GetInstance()->InitializeSurface({w, h}, true);
 }
