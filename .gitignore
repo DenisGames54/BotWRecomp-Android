@@ -31,3 +31,8 @@ ios/assets/Assets.xcassets/AppIcon.appiconset/*.png
 *.sbfres
 *.bfres
 keys.txt
+
+# local extras
+generated*/
+*.profraw
+*.profdata

@@ -26,6 +26,18 @@ def RA0(n: int) -> str:
     return "0u" if n == 0 else R(n)
 
 
+def ea_d(ra: int, imm: int) -> str:
+    """Effective address of a D-form access without update (rA|0 + d).
+
+    For rA != 0 the sum is done in 64 bits instead of wrapping at 32: the host can then fold the
+    displacement into the load/store addressing mode and share one base across consecutive accesses
+    (stmw/lmw, struct fields). A guest address that would wrap past 0 or 4 GB is a guest bug anyway;
+    mem.cpp keeps guard pages on both sides of the 4 GB window."""
+    if ra == 0:
+        return f"(uint32_t){imm}"
+    return f"((uint64_t){R(ra)} + (int64_t){imm})"
+
+
 def sanitize(s: str) -> str:
     return "".join(ch if ch.isalnum() or ch == "_" else "_" for ch in s)
 
@@ -390,7 +402,7 @@ class Generator:
         base = op[:-1] if op.endswith("u") and op[:-1] in dform_ld | dform_st else op
         upd = base != op
         if base in dform_ld or base in dform_st:
-            ea = f"({RA0(ra)} + (uint32_t){imm})" if not upd else f"({R(ra)} + (uint32_t){imm})"
+            ea = ea_d(ra, imm) if not upd else f"({R(ra)} + (uint32_t){imm})"
             if upd:
                 L.append(f"{{ uint32_t ea_ = {ea};")
                 ea = "ea_"
@@ -424,13 +436,13 @@ class Generator:
             L.append("}")
             return L
         if op == "lmw":
-            L.append(f"{{ uint32_t ea_ = {RA0(ra)} + (uint32_t){imm};")
+            L.append(f"{{ uint64_t ea_ = {ea_d(ra, imm)};")
             for k in range(d, 32):
                 L.append(f"{R(k)} = LD32(ea_ + {4 * (k - d)}u);")
             L.append("}")
             return L
         if op == "stmw":
-            L.append(f"{{ uint32_t ea_ = {RA0(ra)} + (uint32_t){imm};")
+            L.append(f"{{ uint64_t ea_ = {ea_d(ra, imm)};")
             for k in range(d, 32):
                 L.append(f"ST32(ea_ + {4 * (k - d)}u, {R(k)});")
             L.append("}")
@@ -468,8 +480,10 @@ class Generator:
         fs = {"stfs": "s", "stfsu": "s", "stfd": "d", "stfdu": "d"}
         if op in fl or op in fs:
             upd = op.endswith("u")
-            ea = f"({R(ra) if upd else RA0(ra)} + (uint32_t){imm})"
-            L.append(f"{{ uint32_t ea_ = {ea};")
+            if upd:
+                L.append(f"{{ uint32_t ea_ = ({R(ra)} + (uint32_t){imm});")
+            else:
+                L.append(f"{{ uint64_t ea_ = {ea_d(ra, imm)};")
             L += self.fp_mem(op[:4] if op.startswith("stf") else op[:3], d)
             if upd:
                 L.append(f"{R(ra)} = ea_;")

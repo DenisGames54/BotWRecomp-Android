@@ -43,28 +43,28 @@ void rt_probe(PPCContext* c, uint32_t addr);
 }
 
 // ---- guest memory (big-endian) ---------------------------------------------------------
-PPC_INLINE uint8_t ld8_(uint8_t* M, uint32_t a) { return M[a]; }
-PPC_INLINE uint16_t ld16_(uint8_t* M, uint32_t a) { uint16_t v; memcpy(&v, M + a, 2); return __builtin_bswap16(v); }
-PPC_INLINE uint32_t ld32_(uint8_t* M, uint32_t a) { uint32_t v; memcpy(&v, M + a, 4); return __builtin_bswap32(v); }
-PPC_INLINE uint64_t ld64_(uint8_t* M, uint32_t a) { uint64_t v; memcpy(&v, M + a, 8); return __builtin_bswap64(v); }
-PPC_INLINE void st8_(uint8_t* M, uint32_t a, uint8_t v) { M[a] = v; }
-PPC_INLINE void st16_(uint8_t* M, uint32_t a, uint16_t v) { v = __builtin_bswap16(v); memcpy(M + a, &v, 2); }
-PPC_INLINE void st32_(uint8_t* M, uint32_t a, uint32_t v) { v = __builtin_bswap32(v); memcpy(M + a, &v, 4); }
-PPC_INLINE void st64_(uint8_t* M, uint32_t a, uint64_t v) { v = __builtin_bswap64(v); memcpy(M + a, &v, 8); }
+PPC_INLINE uint8_t ld8_(uint8_t* M, uint64_t a) { return M[a]; }
+PPC_INLINE uint16_t ld16_(uint8_t* M, uint64_t a) { uint16_t v; memcpy(&v, M + a, 2); return __builtin_bswap16(v); }
+PPC_INLINE uint32_t ld32_(uint8_t* M, uint64_t a) { uint32_t v; memcpy(&v, M + a, 4); return __builtin_bswap32(v); }
+PPC_INLINE uint64_t ld64_(uint8_t* M, uint64_t a) { uint64_t v; memcpy(&v, M + a, 8); return __builtin_bswap64(v); }
+PPC_INLINE void st8_(uint8_t* M, uint64_t a, uint8_t v) { M[a] = v; }
+PPC_INLINE void st16_(uint8_t* M, uint64_t a, uint16_t v) { v = __builtin_bswap16(v); memcpy(M + a, &v, 2); }
+PPC_INLINE void st32_(uint8_t* M, uint64_t a, uint32_t v) { v = __builtin_bswap32(v); memcpy(M + a, &v, 4); }
+PPC_INLINE void st64_(uint8_t* M, uint64_t a, uint64_t v) { v = __builtin_bswap64(v); memcpy(M + a, &v, 8); }
 // byte-reversed (i.e. little-endian) forms: lhbrx/lwbrx/sthbrx/stwbrx
-PPC_INLINE uint16_t ld16r_(uint8_t* M, uint32_t a) { uint16_t v; memcpy(&v, M + a, 2); return v; }
-PPC_INLINE uint32_t ld32r_(uint8_t* M, uint32_t a) { uint32_t v; memcpy(&v, M + a, 4); return v; }
-PPC_INLINE void st16r_(uint8_t* M, uint32_t a, uint16_t v) { memcpy(M + a, &v, 2); }
-PPC_INLINE void st32r_(uint8_t* M, uint32_t a, uint32_t v) { memcpy(M + a, &v, 4); }
+PPC_INLINE uint16_t ld16r_(uint8_t* M, uint64_t a) { uint16_t v; memcpy(&v, M + a, 2); return v; }
+PPC_INLINE uint32_t ld32r_(uint8_t* M, uint64_t a) { uint32_t v; memcpy(&v, M + a, 4); return v; }
+PPC_INLINE void st16r_(uint8_t* M, uint64_t a, uint16_t v) { memcpy(M + a, &v, 2); }
+PPC_INLINE void st32r_(uint8_t* M, uint64_t a, uint32_t v) { memcpy(M + a, &v, 4); }
 
-#define LD8(a) ld8_(M, (uint32_t)(a))
-#define LD16(a) ld16_(M, (uint32_t)(a))
-#define LD32(a) ld32_(M, (uint32_t)(a))
-#define LD64(a) ld64_(M, (uint32_t)(a))
-#define ST8(a, v) st8_(M, (uint32_t)(a), (uint8_t)(v))
-#define ST16(a, v) st16_(M, (uint32_t)(a), (uint16_t)(v))
-#define ST32(a, v) st32_(M, (uint32_t)(a), (uint32_t)(v))
-#define ST64(a, v) st64_(M, (uint32_t)(a), (uint64_t)(v))
+#define LD8(a) ld8_(M, (uint64_t)(a))
+#define LD16(a) ld16_(M, (uint64_t)(a))
+#define LD32(a) ld32_(M, (uint64_t)(a))
+#define LD64(a) ld64_(M, (uint64_t)(a))
+#define ST8(a, v) st8_(M, (uint64_t)(a), (uint8_t)(v))
+#define ST16(a, v) st16_(M, (uint64_t)(a), (uint16_t)(v))
+#define ST32(a, v) st32_(M, (uint64_t)(a), (uint32_t)(v))
+#define ST64(a, v) st64_(M, (uint64_t)(a), (uint64_t)(v))
 
 // ---- integer helpers ------------------------------------------------------------------------
 PPC_INLINE uint32_t rotl32(uint32_t v, uint32_t n) { n &= 31; return n ? (v << n) | (v >> (32 - n)) : v; }

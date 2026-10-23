@@ -144,7 +144,14 @@ uint32_t guest_call(PPCContext* c, uint32_t fn, std::initializer_list<uint32_t> 
 
 // ---- runtime entry points used by generated code -----------------------------------------------
 extern "C" void rt_call(PPCContext* c, uint32_t target) {
-    GuestFn fn = dispatch::lookup(target);
+    // hot path: recompiled function in the text table (one range check, one load)
+    uint32_t off = target - mem::kText;
+    GuestFn fn;
+    if (__builtin_expect(off < g_text_end - mem::kText, 1) && (fn = g_text_table[off >> 2])) {
+        fn(c);
+        return;
+    }
+    fn = dispatch::lookup(target);
     if (__builtin_expect(!fn, 0)) rt_trap(c, target, "indirect call to an address with no recompiled function");
     fn(c);
 }
