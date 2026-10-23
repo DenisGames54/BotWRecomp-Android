@@ -1,160 +1,130 @@
-# BotW Recompiled (unofficial)
+# BotW Recompiled: Android / Linux ARM64 (unofficial)
 
-A native port of **The Legend of Zelda: Breath of the Wild (Wii U)** to iPhone and Apple Silicon
-Macs. The game's PowerPC code (`U-King.rpx`) is statically recompiled to C++ and runs on a Cafe OS
-runtime written for this port, with Cemu's Latte GPU layer drawing through Metal. There is no
-emulator and no JIT, so it runs as an ordinary signed iOS app.
+An unofficial **Android / Linux ARM64 port** of [BotWRecomp](https://github.com/IshaanKalra2103/BotWRecomp)
+by Ishaan Kalra, which statically recompiles the PowerPC code of **The Legend of Zelda: Breath of the
+Wild (Wii U)** to C++ and runs it on a Cafe OS runtime written for the project.
+
+The original project targets iPhone and Apple Silicon Macs with Cemu's Latte GPU layer drawing through
+Metal. This fork replaces that renderer with Cemu's **Vulkan** backend and builds on Linux ARM64, so
+it runs on Android phones with a Vulkan driver (tested on Turnip / Adreno).
 
 > [!IMPORTANT]
-> This repository contains no game files and no game code. You need your own copy of the Wii U game.
-> The build recompiles *your* copy on *your* Mac, and you install the result on your own iPhone.
-> There is no download-and-play IPA, and there never will be one: it would contain Nintendo's code.
+> **This repository contains no game files, no game code, no ROMs, no keys and no copyrighted or
+> protected material of any kind.** It is only a tool. You need your own legally obtained copy of the
+> Wii U game, dumped from your own console. The build recompiles *your* copy on *your* machine.
+> There is no download-and-play package, and there never will be one. How you obtain and use the game
+> files is your own responsibility. Do not ask for game files, keys or dumps in issues or discussions.
+
+> [!WARNING]
+> **This project is in an early stage and under active development.** Expect bugs, crashes, low
+> frame rates and breaking changes. It is not ready for general use, and there is no APK or
+> installer yet.
 
 ## Status
 
-**iPhone (main target).** Tested on one iPhone 16 Pro (A18 Pro, 8 GB), signed with a free Apple ID.
-The game boots and plays with on-screen touch controls. The GPU ran at mostly 35-60 fps in the open
-world, using about 2.4 GB of memory. On the one long run so far, the game hung after about 4 minutes
-of play (the cause is not known yet), so expect that. Nothing else has been tested: no other iPhone,
-no iPad.
+Early and experimental. Everything below was tested on a single device:
 
-**Mac.** Plays with keyboard or a controller (DualSense, with gyro aiming). On an M1 Pro: 60 fps in
-menus, 24-35 fps in the open world at the default render scale (about 2.4x).
+- **Device:** POCO F5 (Snapdragon 7+ Gen 2, Adreno 725)
+- **Environment:** Debian ARM64 inside a [DroidSpaces](https://github.com/ShubhamPatilsd/droidspaces) container on Android
+- **GPU driver:** Mesa Turnip (Vulkan 1.4)
 
-Known gaps: the iPhone hang above; the app keeps sending GPU work when it goes to the background;
-shaders compile on first use, so the first run hitches; DLC is untested. Details for iOS are in
-[`ios/PORTING.md`](ios/PORTING.md).
+What works:
+
+- Full Linux ARM64 build (CMake + clang).
+- Vulkan renderer (Cemu's Latte Vulkan backend, vendored from Cemu commit `a53cf0e`) running on Turnip,
+  from the title screen to the open world.
+- **H.264 video playback** (cutscenes, tower videos) through a port of Cemu's `ih264d` decoder.
+  Without it the game crashes on video scenes.
+- Workaround for a Turnip crash caused by the `fmulz`/`fmadz` shader pattern.
+- Optional **PGO** (profile-guided optimization) build, which gave a clear speedup on the generated guest code.
+- `botw-run.sh`: launcher that locks the GPU clock and pins threads to the big cores.
+- An experimental second code generator, `tools/codegen_v2.py`, that emits tighter guest code
+  (work in progress).
+
+Performance (honest numbers, early work):
+
+| Setup | Open world |
+| --- | --- |
+| Baseline build | about 12-16 fps |
+| GPU clock locked at 591 MHz + PGO | about 20-30 fps, dropping below 20 in heavy scenes |
+
+Profiling shows roughly 75% of CPU time in the recompiled guest code and about 14% in the
+renderer/driver, so current work focuses on the generated code, not the GPU.
+
+Known gaps: performance is not yet playable for most people, shaders compile on first use (hitches),
+only one device and one driver have been tested, DLC is untested, and there is no APK yet.
+
+## Roadmap
+
+1. Finish performance work on the Linux/Debian build (codegen, PGO, compiler flags).
+2. Package everything as a standalone Android **APK**, which will live in a **separate repository**.
+3. Controller and touch controls on Android.
 
 ## What you need
 
-- **A Mac with Apple Silicon** to build, even for the iPhone. Xcode (from the App Store, with the
-  iOS platform installed) and [Homebrew](https://brew.sh).
-- **An iPhone on iOS 18 or later**, A14 chip or newer. Only an 8 GB iPhone 16 Pro has been tested;
-  phones with less memory will probably run out of it. A free Apple ID is enough to sign the app.
-- **The game, as files**: Breath of the Wild for Wii U, **USA, with update 1.6.0 (v208)**, as a
-  folder containing `code/`, `content/` and `meta/`. The recompiler and the game patches are made
-  for that exact executable. Check yours:
+- **An Android phone with a Vulkan 1.1+ GPU.** Only the POCO F5 (Adreno 725, Turnip) has been tested.
+  A Linux ARM64 environment is required for now (for example Debian in DroidSpaces, or Termux proot
+  with GPU access).
+- **A PC or the phone itself** to run the recompiler (a few GB of RAM and some patience).
+- **A legal dump of the game, as a folder, in version v208.** Breath of the Wild for Wii U,
+  **USA, update 1.6.0 (v208)**, dumped from your own console, as a folder containing `code/`,
+  `content/` and `meta/` (the update's files copied over the base game's). Other regions and other
+  versions are **not** supported: the recompiler and the patches are made for that exact executable.
+  Check yours:
 
   ```bash
-  shasum -a 256 /path/to/game/code/U-King.rpx
+  sha256sum /path/to/game/code/U-King.rpx
   # ba58da5b95ce929e005d058ceb08b9b2788d1ab2bbc8a6c189bbadca0bb34d30
   ```
 
-### Getting the game files
+  Dump the game and its update from your own Wii U (for example with
+  [Dumpling](https://github.com/emiyl/dumpling)). Nothing else is provided or supported here.
 
-Dump the game and its update from your own Wii U (for example with
-[Dumpling](https://github.com/emiyl/dumpling)). Then copy the update's `code/`, `content/` and
-`meta/` folders over the base game's, replacing files, so that one folder holds the updated game.
+## Build (Linux ARM64)
 
-If you have a `.wud` or `.wux` disc image and its disc key instead, `tools/wud_extract.py` unpacks
-the base game. It needs the Wii U common key, which is not included here. Pass it in
-`WIIU_COMMON_KEY`, either as hex or as a file:
+The commands are the same as upstream's desktop build; this fork only changes specific files.
 
 ```bash
-WIIU_COMMON_KEY=/path/to/common.key uv run python -I tools/wud_extract.py game.wux game.key game-base
-```
+# Dependencies (Debian/Ubuntu)
+sudo apt install build-essential clang cmake ninja-build git python3 \
+    libvulkan-dev libsdl3-dev libfmt-dev libssl-dev libzstd-dev libboost-dev libglm-dev
+# Python tooling: uv (https://docs.astral.sh/uv/)
 
-You still need the v208 update from your console on top of that.
+git clone https://github.com/DenisGames54/BotWRecomp-Android
+cd BotWRecomp-Android
+git checkout android-vulkan
 
-The scripts look for the game in a folder named `game` next to this repository. If yours is
-elsewhere, set `BOTW_GAME=/path/to/game`.
-
-## Build for iPhone
-
-```bash
-brew install cmake ninja uv boost glm
-git clone https://github.com/IshaanKalra2103/BotWRecomp
-cd BotWRecomp
-
-# 1. Recompile your copy of the game to C++ (writes generated/, about a minute)
+# 1. Recompile your copy of the game to C++ (writes generated/)
 uv run python -I tools/recompile.py /path/to/game/code/U-King.rpx generated
-```
 
-2. Sign in to Xcode with your Apple ID (Xcode > Settings > Accounts). Connect the iPhone by USB,
-   unlock it and tap Trust. If Developer Mode is off, turn it on under Settings > Privacy & Security
-   > Developer Mode (the switch appears after the phone has been connected to Xcode once).
-
-3. Make a provisioning profile, build, sign and install:
-
-   ```bash
-   ios/scripts/provision.sh           # registers the phone and makes the profile
-   ios/scripts/build.sh iphoneos      # about 15 minutes the first time (M1 Pro), incl. SDL3, fmt, zstd
-   ios/scripts/device.sh install
-   ```
-
-   The app's bundle ID is `com.<your Mac user name>.BotWRecomp`. Bundle IDs are unique across all
-   Apple accounts, so if provisioning says it is taken, put another one in `ios/local.env`:
-   `BOTW_BUNDLE_ID=com.yourname.BotWRecomp`. The other settings are listed in
-   [`ios/scripts/env.sh`](ios/scripts/env.sh).
-
-4. Copy the game onto the phone (about 12 GB):
-
-   ```bash
-   BOTW_GAME=/path/to/game ios/scripts/device.sh copy-game
-   ```
-
-   Or in Finder: select the iPhone, open the Files tab, and drag your game folder (the one with
-   `code/`, `content/` and `meta/`) onto **BotW**.
-
-5. On the iPhone, trust your developer certificate (Settings > General > VPN & Device Management),
-   then open **BotW**.
-
-Controls: on-screen touch controls, shown while no controller is connected. Controllers go through
-SDL and work on the Mac, but have not been tried on the iPhone yet. The on-screen menu button opens
-the settings menu: frame rate (30 or 60), resolution, aspect, upscale filter, gyro, button layout,
-touch controls, FPS counter and volume.
-
-With a free Apple ID the app stops opening after 7 days. Run `ios/scripts/provision.sh`,
-`ios/scripts/build.sh iphoneos` and `ios/scripts/device.sh install` again; the game files and saves
-stay on the phone. `ios/scripts/device.sh log` fetches the runtime log.
-
-To add an app icon, put a 1024x1024 PNG at
-`ios/assets/Assets.xcassets/AppIcon.appiconset/AppIcon-1024.png` before building.
-
-## Build for Mac
-
-```bash
-brew install cmake ninja uv sdl3 fmt openssl@3 zstd boost glm libpng
-uv run python -I tools/recompile.py /path/to/game/code/U-King.rpx generated
+# 2. Build
 cmake -B build -G Ninja && ninja -C build
+
+# 3. Run
 BOTW_GAME=/path/to/game tools/play.sh
 ```
 
-F11 toggles fullscreen. F1, L3+R3 or the DualSense touchpad opens the settings menu. `--fps 30` and
-`--scale 1` give the original frame rate and resolution. Saves and settings are kept in
-`~/Library/Application Support/BotWRecomp`.
+The scripts look for the game in a folder named `game` next to the repository; if yours is elsewhere,
+set `BOTW_GAME=/path/to/game`.
 
-## How it works
+## Credits and licenses
 
-- `cafe/` and `tools/recompile.py`: the recompiler. It loads the RPX (Wii U ELF with compressed
-  sections and relocations), finds every function, and writes one C++ function per PowerPC
-  function into `generated/`, bucketed into files by address.
-- `runtime/`: the Cafe OS the game expects. Loader, memory and heaps, threads and synchronisation,
-  the file system, `coreinit`, GX2 (the graphics API, building the same command packets as Cemu's), `snd_core` audio, controller and gyro input, game patches such as 60 fps
-  (`runtime/src/game/`), and the window and touch controls.
-- `runtime/cemu/`: Cemu's Latte GPU layer (command processor, shader decompiler, texture cache, Metal
-  renderer), vendored with small changes. `runtime/cemu_shims/` stands in for the parts of Cemu that
-  are not vendored.
-- `ios/`: the iOS app. Its own CMake project over the same sources, plus the UIKit entry point, a
-  Metal layer, signing and device scripts. See [`ios/PORTING.md`](ios/PORTING.md).
-- `runtime/src/gpu_native/` and `tools/shaders/`: an experimental Metal renderer meant to replace
-  Cemu's layer ([`docs/native-renderer.md`](docs/native-renderer.md)). It is off by default.
+This is a fork of [IshaanKalra2103/BotWRecomp](https://github.com/IshaanKalra2103/BotWRecomp).
+All the recompiler and runtime work is by **Ishaan Kalra**. This fork adds the Linux ARM64 / Android
+work (Vulkan renderer, H.264 decoder, Turnip fixes, PGO, launcher scripts) by
+[DenisGames54](https://github.com/DenisGames54).
 
-## Credits and license
-
-By [Ishaan Kalra](https://github.com/IshaanKalra2103), built with Claude Code.
-
-- [Cemu](https://github.com/cemu-project/Cemu): the GPU layer in `runtime/cemu/`, and parts of
-  GX2, snd_core and the motion code in `runtime/src/` (each such file says so at the top).
-- Cemu's graphic packs (CC0): the BotW resolution rules in `runtime/cemu_shims/botw_texture_rules.inc`.
-  The 60 fps approach follows the FPS++ pack by Xalphenos, rajkosto, epigramx, Crementif,
-  leoetlino, Pig and Exzap.
+- [Cemu](https://github.com/cemu-project/Cemu): the Latte GPU layer (including the Vulkan renderer)
+  and the H.264 decoder (`ih264d`) come from Cemu, plus parts of GX2, snd_core and the motion code.
+  Each such file says so at the top.
+- Cemu's graphic packs (CC0) and the FPS++ pack authors for the 60 fps approach, as credited upstream.
 - [SDL3](https://libsdl.org), [fmt](https://fmt.dev), [zstd](https://facebook.github.io/zstd/),
-  [Dear ImGui](https://github.com/ocornut/imgui) and [metal-cpp](https://developer.apple.com/metal/cpp/).
+  [Dear ImGui](https://github.com/ocornut/imgui), [Mesa / Turnip](https://www.mesa3d.org).
 
-This project's own code is MIT licensed ([LICENSE](LICENSE)). Code from Cemu stays under the Mozilla
-Public License 2.0 ([runtime/cemu/LICENSE.txt](runtime/cemu/LICENSE.txt)). Dear ImGui and metal-cpp
-keep their own licenses, in `runtime/cemu/dependencies/`.
+Licenses are unchanged from upstream: the project's own code is MIT ([LICENSE](LICENSE)). Code from
+Cemu stays under the Mozilla Public License 2.0 ([runtime/cemu/LICENSE.txt](runtime/cemu/LICENSE.txt)).
+Third-party components keep their own licenses.
 
-The Legend of Zelda and Breath of the Wild are trademarks of Nintendo. This is an unofficial fan
-project, not affiliated with or endorsed by Nintendo.
+*The Legend of Zelda* and *Breath of the Wild* are trademarks of Nintendo. This is an unofficial fan
+project, not affiliated with or endorsed by Nintendo. This repository is provided as a technical tool
+only, with no warranty, and the user is solely responsible for how it is used.
