@@ -2,6 +2,11 @@
 
 #include <execinfo.h>
 #include <mach-o/dyld.h>
+#ifdef __APPLE__
+#define BOTW_SETNAME(s) pthread_setname_np(s)
+#else
+#define BOTW_SETNAME(s) pthread_setname_np(pthread_self(), (s))
+#endif
 #include <pthread.h>
 #include <sched.h>
 #include <signal.h>
@@ -33,8 +38,12 @@ void run_thread(GuestThread* t) {
     // The game's main thread and the light timing threads (audio, alarms, GX2 callbacks) get the highest QoS so
     // the scheduler keeps them on performance cores (a phone has two); worker threads one step below.
     const bool critical = t->is_main || t->name == "AX" || t->name == "alarms" || t->name == "GX2 callbacks";
+#ifdef __APPLE__
     pthread_set_qos_class_self_np(critical ? QOS_CLASS_USER_INTERACTIVE : QOS_CLASS_USER_INITIATED, 0);
-    pthread_setname_np(t->name.empty() ? "guest" : t->name.c_str());
+#else
+    (void)critical;
+#endif
+    BOTW_SETNAME(t->name.empty() ? "guest" : t->name.c_str());
     PPCContext* c = &t->ctx;
     c->lr = 0;
     rt_call(c, t->entry);
@@ -317,7 +326,7 @@ HLE_EXPORT(coreinit, OSSetThreadName) {
     std::lock_guard<std::mutex> l(g_klock);
     if (GuestThread* t = get(os)) {
         t->name = name ? mem::str(name) : "";
-        if (t == current()) pthread_setname_np(t->name.c_str());
+        if (t == current()) BOTW_SETNAME(t->name.c_str());
     }
 }
 

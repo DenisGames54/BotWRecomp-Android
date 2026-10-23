@@ -1,6 +1,7 @@
 // Vendored from Cemu (src/Common/MemPtr.h), MPL-2.0. Stack/Sys allocator includes removed (see cemu.h).
 #pragma once
 #include <type_traits>
+#include <atomic>
 #include "betype.h"
 
 using MPTR = uint32; // generic address in PowerPC memory space

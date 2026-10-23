@@ -98,7 +98,11 @@ bool debug_watch_fault(void* addr, void* uctx) {
     if (!page || a < page || a >= page + g_psize) return false;
     if (a >= g_target.load() - 3 && a <= g_target.load()) {
         auto* uc = (ucontext_t*)uctx;
+#ifdef __APPLE__
         uint64_t pc = uc->uc_mcontext->__ss.__pc, lr = uc->uc_mcontext->__ss.__lr, fp = uc->uc_mcontext->__ss.__fp;
+#else
+        uint64_t pc = uc->uc_mcontext.pc, lr = uc->uc_mcontext.regs[30], fp = uc->uc_mcontext.regs[29];
+#endif
         char line[1024];
         int k = snprintf(line, sizeof line, "watch: write at %08x, host frames (base 0x%lx): 0x%llx 0x%llx",
                          (uint32_t)(a - (uintptr_t)g_mem), (unsigned long)_dyld_get_image_header(0),

@@ -891,7 +891,12 @@ namespace snd_core
 		pthread_attr_setstacksize(&attr, kIstHostStackSize);
 #endif
 		int r = pthread_create(&s_istHostThread, &attr, [](void*) -> void* {
+			
+#ifdef __APPLE__
 			pthread_setname_np("AX");
+#else
+			pthread_setname_np(pthread_self(), "AX");
+#endif
 			AXIst_ThreadEntry();
 			return nullptr;
 		}, nullptr);

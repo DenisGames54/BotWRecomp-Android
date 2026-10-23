@@ -2,6 +2,10 @@
 #pragma once
 
 #include <type_traits>
+#include <climits>
+#include <utility>
+#include <cstdint>
+#include <cstddef>
 
 namespace Latte
 {
