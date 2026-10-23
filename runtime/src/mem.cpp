@@ -20,15 +20,24 @@ std::map<uint32_t, uint32_t> g_used;
 }  // namespace
 
 void init() {
-    size_t size = (1ull << 32) + 0x10000;  // + guard so accesses near 0xFFFFFFFF stay in bounds
+    size_t size = (1ull << 32) + 0x10000 + (2u << 20);  // + guard so accesses near 0xFFFFFFFF stay in bounds, + 2 MB to align the base
     void* p = mmap(nullptr, size, PROT_READ | PROT_WRITE, MAP_ANON | MAP_PRIVATE | MAP_NORESERVE, -1, 0);
     if (p == MAP_FAILED) {
         LOG("FATAL: cannot reserve the 4 GB guest address space");
         abort();
     }
-    g_mem = (uint8_t*)p;
+    g_mem = (uint8_t*)(((uintptr_t)p + (2u << 20) - 1) & ~(uintptr_t)((2u << 20) - 1));  // 2 MB aligned so THP can back the heaps
     memory_base = g_mem;
     mprotect(g_mem, 0x10000, PROT_NONE);  // catch guest null-pointer accesses
+#ifdef __linux__
+    // BOTW_THP=1: back the guest text/data and MEM1/MEM2 with transparent huge pages (fewer dTLB misses)
+    if (const char* e = getenv("BOTW_THP"); e && *e == '1') {
+        int r1 = madvise(g_mem + kText, kMem2 - kText, MADV_HUGEPAGE);
+        int r2 = madvise(g_mem + kMem2, kMem2Size, MADV_HUGEPAGE);
+        int r3 = madvise(g_mem + kMem1, kMem1Size, MADV_HUGEPAGE);
+        LOG("THP madvise: %d %d %d", r1, r2, r3);
+    }
+#endif
     LOG("guest memory at %p", (void*)g_mem);
 }
 

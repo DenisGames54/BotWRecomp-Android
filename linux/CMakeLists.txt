@@ -77,15 +77,17 @@ endif()
 list(APPEND LIBS SPIRV-Tools-opt SPIRV-Tools)
 target_link_libraries(cemu_gpu PRIVATE SDL3::SDL3 fmt::fmt ZLIB::ZLIB OpenSSL::Crypto)
 
+add_subdirectory(${ROOT}/runtime/third_party/ih264d ${CMAKE_BINARY_DIR}/ih264d EXCLUDE_FROM_ALL)
 add_library(runtime_obj OBJECT ${RUNTIME_SOURCES})
 target_include_directories(runtime_obj PRIVATE ${ROOT}/linux/compat ${ROOT}/runtime/include ${ROOT}/runtime/src ${ROOT}/generated)
 target_compile_options(runtime_obj PRIVATE -Wall -Wno-unused-function -Wno-unused-variable -fwrapv -flax-vector-conversions -mcpu=${BOTW_CPU})
+target_include_directories(runtime_obj PRIVATE ${ROOT}/runtime/third_party/ih264d ${ROOT}/runtime/src/h264)
 target_compile_options(runtime_obj PRIVATE ${PGO_COMPILE})
 target_link_libraries(runtime_obj PRIVATE SDL3::SDL3 fmt::fmt ZLIB::ZLIB OpenSSL::Crypto)
 
 if(GUEST_SOURCES)
   add_executable(BotWRecomp $<TARGET_OBJECTS:runtime_obj> $<TARGET_OBJECTS:guest> $<TARGET_OBJECTS:cemu_gpu>)
-  target_link_libraries(BotWRecomp PRIVATE ${LIBS})
+  target_link_libraries(BotWRecomp PRIVATE ${LIBS} ih264d)
   target_link_options(BotWRecomp PRIVATE ${PGO_LINK})
 endif()
 
