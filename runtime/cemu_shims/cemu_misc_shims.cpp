@@ -14,6 +14,6 @@ std::atomic_uint64_t g_compiling_pipelines_syncTimeSum = 0;
 MPTR coreinit_allocFromSysArea(uint32 size, uint32 alignment) { return mem::sys_alloc(size, alignment < 16 ? 16 : alignment); }
 void coreinit_freeToSysArea(MPTR mem) { mem::sys_free(mem); }
 
-uint64 PPCTimer_getRawTsc() { timespec ts; clock_gettime(CLOCK_MONOTONIC, &ts); return (uint64)ts.tv_sec * 1000000000ull + ts.tv_nsec; }
+uint64 PPCTimer_getRawTsc() { uint64 t; asm volatile("mrs %0, cntvct_el0" : "=r"(t)); return t; }
 
 void LatteOverlay_pushNotification(const std::string& msg, sint32) { log_write("[gpu] %s", msg.c_str()); }

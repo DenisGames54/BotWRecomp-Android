@@ -1,5 +1,8 @@
 // BotWRecomp entry: map guest memory, load U-King.rpx, initialise Cafe OS state and run the game's
 // entry point on its own host thread. The host main thread stays free for the window/event loop.
+#ifdef BOTW_PGO_GEN
+extern "C" int __llvm_profile_write_file(void);
+#endif
 #include <signal.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -31,6 +34,9 @@ uint64_t g_trace_from = 0, g_trace_to = 0;  // --trace-frames A-B: HLE call trac
 
 extern "C" PPC_NORETURN void rt_fatal_exit(void) {
     fflush(stderr);
+#ifdef BOTW_PGO_GEN
+    __llvm_profile_write_file();
+#endif
     _exit(3);
 }
 
@@ -48,6 +54,12 @@ static void on_fault(int sig, siginfo_t* si, void* uctx) {
     rt_trap(t ? &t->ctx : nullptr, 0, "signal (ctx registers may be stale)");
 }
 
+#ifdef BOTW_PGO_GEN
+#include <cstdio>
+#include <cerrno>
+extern "C" int __llvm_profile_write_file(void);
+extern "C" unsigned long long __llvm_profile_get_size_for_buffer(void);
+#endif
 int main(int argc, char** argv) {
     // saves, caches, logs, settings; BOTW_USER_ROOT lets test runs use their own folder (tools/run.sh)
     if (const char* e = getenv("BOTW_USER_ROOT")) g_user_root = e;
@@ -114,6 +126,12 @@ int main(int argc, char** argv) {
 
     uint32_t argv_g = os::build_argv("U-King.rpx");
     threads::start_main(loader::main_module().entry, 1, argv_g, loader::main_module().stack_size);
-    os::host_main_loop();  // returns when the game exits or the time limit is reached
+    os::host_main_loop();
+#ifdef BOTW_PGO_GEN
+    fprintf(stderr, "PGO: expected %llu bytes\n", __llvm_profile_get_size_for_buffer());
+    int pgo_rc = __llvm_profile_write_file();
+    fprintf(stderr, "PGO: write_file rc=%d errno=%d\n", pgo_rc, errno);
+    fflush(stderr);
+#endif  // returns when the game exits or the time limit is reached
     return 0;
 }

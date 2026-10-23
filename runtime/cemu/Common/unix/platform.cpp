@@ -3,7 +3,11 @@
 
 uint32_t GetTickCount()
 {
-#if BOOST_OS_LINUX
+#if defined(__aarch64__) && BOOST_OS_LINUX
+	static const uint64_t div = []{ uint64_t f; asm volatile("mrs %0, cntfrq_el0" : "=r"(f)); return f / 1000; }();
+	uint64_t t; asm volatile("mrs %0, cntvct_el0" : "=r"(t));
+	return (uint32_t)(t / div);
+#elif BOOST_OS_LINUX
 	struct timespec ts;
 	clock_gettime(CLOCK_MONOTONIC_RAW, &ts);
 	return (1000 * ts.tv_sec + ts.tv_nsec / 1000000);

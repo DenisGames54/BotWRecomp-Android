@@ -29,10 +29,17 @@ uint32_t build_argv(const char* rpx) {
     return argv;
 }
 
+#ifdef BOTW_PGO_GEN
+extern "C" int __llvm_profile_write_file(void);
+#define BOTW_PGO_FLUSH() __llvm_profile_write_file()
+#else
+#define BOTW_PGO_FLUSH() ((void)0)
+#endif
 void request_exit(int code) {
     g_exit_code = code;
     // give the log a moment, then leave without running host static destructors
     fflush(stderr);
+    BOTW_PGO_FLUSH();
     _exit(code);
 }
 
@@ -40,6 +47,7 @@ void host_main_loop() {
     window::run();
     if (g_run_seconds) threads::dump();  // test runs: where every thread was at the end
     fflush(stderr);
+    BOTW_PGO_FLUSH();
     _exit(0);
 }
 }  // namespace os

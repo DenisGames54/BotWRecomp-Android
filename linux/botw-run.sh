@@ -15,4 +15,4 @@ echo 0 > $K/min_pwrlevel
 if [ -n "$BOTW_NOIDLE" ]; then for c in 4 5 6 7; do for s in $C/cpu$c/cpuidle/state[1-9]*; do echo 1 > $s/disable; done; done; fi
 export BOTW_USER_ROOT=$HOME/botw-user BOTW_GAME=/sdcard/Download/game DISPLAY=:5
 cd ~/BotWRecomp
-${AFF-taskset -c 4-7} ./build-clang/BotWRecomp "$@"
+${AFF-taskset -c 4-7} ${BOTW_BIN:-./build-pgo-use/BotWRecomp} "$@"
