@@ -1,3 +1,4 @@
+#include <botw_pin.h>
 #include "Cafe/HW/Latte/ISA/RegDefines.h"
 #include "Cafe/OS/libs/gx2/GX2.h" // todo - remove dependency
 #include "Cafe/HW/Latte/Core/Latte.h"
@@ -117,6 +118,9 @@ int Latte_ThreadEntry()
 	SetThreadName("LatteThread");
 #if defined(BOTWRECOMP) && defined(__APPLE__)
 	pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);  // with the game's main thread on the performance cores
+#endif
+#if defined(BOTWRECOMP) && !defined(__APPLE__)
+	botw_pin_from_env("BOTW_GPU_CPUS");
 #endif
 	sint32 w,h;
 	WindowSystem::GetWindowPhysSize(w,h);

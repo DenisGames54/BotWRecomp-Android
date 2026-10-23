@@ -2,6 +2,7 @@
 
 #include <execinfo.h>
 #include <mach-o/dyld.h>
+#include <botw_pin.h>
 #ifdef __APPLE__
 #define BOTW_SETNAME(s) pthread_setname_np(s)
 #else
@@ -41,7 +42,7 @@ void run_thread(GuestThread* t) {
 #ifdef __APPLE__
     pthread_set_qos_class_self_np(critical ? QOS_CLASS_USER_INTERACTIVE : QOS_CLASS_USER_INITIATED, 0);
 #else
-    (void)critical;
+    if (critical) botw_pin_from_env("BOTW_CRIT_CPUS");
 #endif
     BOTW_SETNAME(t->name.empty() ? "guest" : t->name.c_str());
     PPCContext* c = &t->ctx;
