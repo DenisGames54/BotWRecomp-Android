@@ -1,18 +1,33 @@
 #!/bin/bash
+# Launcher for the Linux ARM64 build (see the README, section "Running").
+ROOT=$(cd "$(dirname "$(readlink -f "$0")")/.." && pwd)
+cd "$ROOT" || exit 1
+BIN=${BOTW_BIN:-}
+if [ -z "$BIN" ]; then
+  for b in build-pgo-use build; do [ -x "$ROOT/$b/BotWRecomp" ] && BIN="$ROOT/$b/BotWRecomp" && break; done
+fi
+[ -x "$BIN" ] || { echo "no binary found: build it first or set BOTW_BIN" >&2; exit 1; }
+export BOTW_GAME=${BOTW_GAME:-$ROOT/game}
+export BOTW_USER_ROOT=${BOTW_USER_ROOT:-$HOME/botw-user}
 K=/sys/class/kgsl/kgsl-3d0
 C=/sys/devices/system/cpu
-OLD_MIN=$(cat $K/devfreq/min_freq); OLD_PWR=$(cat $K/min_pwrlevel)
-for c in 4 5 6 7; do OLD_GOV[$c]=$(cat $C/cpu$c/cpufreq/scaling_governor); done
+CPUS=${BOTW_CPUS-4-7}
+
 restore() {
-  if [ -n "$BOTW_NOIDLE" ]; then for c in 4 5 6 7; do for s in $C/cpu$c/cpuidle/state[1-9]*; do echo 0 > $s/disable; done; done; fi
-  echo $OLD_MIN > $K/devfreq/min_freq; echo $OLD_PWR > $K/min_pwrlevel
-  for c in 4 5 6 7; do echo ${OLD_GOV[$c]} > $C/cpu$c/cpufreq/scaling_governor; done
+  [ -n "$GPU_LOCKED" ] && { echo "$OLD_MIN" > $K/devfreq/min_freq; echo "$OLD_PWR" > $K/min_pwrlevel; }
+  if [ -n "$IDLE_OFF" ]; then for c in 4 5 6 7; do for s in $C/cpu$c/cpuidle/state[1-9]*; do echo 0 > $s/disable; done; done; fi
 }
 trap restore EXIT INT TERM
-cat $K/devfreq/max_freq > $K/devfreq/min_freq
-echo 0 > $K/min_pwrlevel
 
-if [ -n "$BOTW_NOIDLE" ]; then for c in 4 5 6 7; do for s in $C/cpu$c/cpuidle/state[1-9]*; do echo 1 > $s/disable; done; done; fi
-export BOTW_USER_ROOT=$HOME/botw-user BOTW_GAME=/sdcard/Download/game DISPLAY=:5
-cd ~/BotWRecomp
-${AFF-taskset -c 4-7} ${BOTW_BIN:-./build-pgo-use/BotWRecomp} "$@"
+if [ "${BOTW_GPU_LOCK:-1}" = 1 ] && [ -w $K/devfreq/min_freq ]; then
+  OLD_MIN=$(cat $K/devfreq/min_freq); OLD_PWR=$(cat $K/min_pwrlevel)
+  cat $K/devfreq/max_freq > $K/devfreq/min_freq
+  echo 0 > $K/min_pwrlevel
+  GPU_LOCKED=1
+fi
+if [ -n "$BOTW_NOIDLE" ]; then
+  IDLE_OFF=1
+  for c in 4 5 6 7; do for s in $C/cpu$c/cpuidle/state[1-9]*; do echo 1 > $s/disable; done; done
+fi
+
+${CPUS:+taskset -c $CPUS} "$BIN" "$@"
