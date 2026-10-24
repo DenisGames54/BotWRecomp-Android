@@ -30,15 +30,27 @@ if [ -n "$BOTW_NOIDLE" ]; then
   for c in 4 5 6 7; do for s in $C/cpu$c/cpuidle/state[1-9]*; do echo 1 > $s/disable; done; done
 fi
 
-(
-  sleep 4
-  P=$(pgrep -n BotWRecomp)
-  if [ -n "$P" ]; then
-    HEAVY_TID=$(ps -L -o tid,pcpu -p $P --sort=-pcpu | sed -n '2p' | awk '{print $1}')
-    if [ -n "$HEAVY_TID" ]; then
-      taskset -cp 7 "$HEAVY_TID" >/dev/null 2>&1
-    fi
-  fi
-) &
+# Pin the busiest thread (the game's critical path) to the fastest core. The Android scheduler often leaves
+# it on a slower core, which changes the frame rate by up to ~35% from run to run. BOTW_HEAVY_CPU= disables it.
+fastest_cpu() {
+  local b=-1 m=0 f d
+  for d in $C/cpu[0-9]*; do
+    f=$(cat $d/cpufreq/cpuinfo_max_freq 2>/dev/null) || continue
+    if [ "$f" -gt "$m" ]; then m=$f; b=${d##*cpu}; fi
+  done
+  [ "$b" = -1 ] || echo "$b"
+}
+HEAVY=${BOTW_HEAVY_CPU-$(fastest_cpu)}
+pin_heavy() {
+  local p t
+  p=$(pgrep -n -x BotWRecomp) || return
+  t=$(top -H -b -n 2 -d 2 -p "$p" 2>/dev/null | awk '/^top/{n++} n==2 && $1 ~ /^[0-9]+$/ {print $1; exit}')
+  [ -z "$t" ] || [ "$t" = "$PREV_HEAVY" ] && return
+  [ -n "$PREV_HEAVY" ] && taskset -cp "${CPUS:-0-7}" "$PREV_HEAVY" >/dev/null 2>&1
+  taskset -cp "$HEAVY" "$t" >/dev/null 2>&1 && echo "[botw-run] busiest thread $t -> cpu $HEAVY" >&2 && PREV_HEAVY=$t
+}
+if [ -n "$HEAVY" ]; then
+  ( for d in 6 40 60; do sleep $d; pin_heavy; done ) &
+fi
 
 ${CPUS:+taskset -c $CPUS} "$BIN" "$@"

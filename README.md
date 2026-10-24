@@ -52,7 +52,8 @@ runs depending on temperature and where the scheduler puts the threads):
 | --- | --- | --- |
 | Baseline build, stock clocks | 12-16 fps | |
 | + GPU clock locked at maximum | 17-23 fps | 38-58 fps |
-| + PGO build | about 24-34 fps (same save, same spot) | |
+| + PGO build | about 25-34 fps (same save, same spot) | |
+| + busiest thread pinned to the fastest core (default) | about 33-34 fps | |
 
 Profiling of the heavy scenes shows roughly 75% of CPU time in the recompiled guest code and about
 14% in the renderer and driver. The front end is the bottleneck: L1 instruction-cache misses are about 22 per
@@ -181,7 +182,8 @@ linux/botw-run.sh [--fps 30|60] [--scale N] [--headless] [--seconds N]
 | `BOTW_CPUS` | `4-7` | CPU list for `taskset`; empty disables it. `4-7` are the A710/X2 cores of a Snapdragon 7+ Gen 2 |
 | `BOTW_NOIDLE` | off | `1` disables deep CPU idle on cores 4-7 (no measurable gain so far) |
 | `BOTW_THP` | off | `1` asks for transparent huge pages for guest memory (needs `echo madvise > /sys/kernel/mm/transparent_hugepage/enabled`; little gain on fragmented phones) |
-| `BOTW_CRIT_CPUS`, `BOTW_GPU_CPUS` | unset | pin the game's critical threads / the renderer thread to a CPU list (no gain measured) |
+| `BOTW_HEAVY_CPU` | fastest core (auto) | CPU that receives the busiest thread a few seconds after start (re-checked after the world loads). Empty disables it |
+| `BOTW_CRIT_CPUS`, `BOTW_GPU_CPUS` | unset | **do not use**: pins all the game's critical threads (or the renderer thread) to one CPU list; with one core it dropped the frame rate from about 33 to 18 fps |
 | `DISPLAY` | your environment | X11 display for SDL3 (for example Termux:X11) |
 
 Command line options:
@@ -211,7 +213,7 @@ Keyboard layout: **E** = A, **Left Shift** = B, **Space** = X, **F** = Y, **Q** 
 
 ### Benchmarking tips
 
-Frame rate varies by about +/-15% from run to run (temperature, which core the busiest thread lands on).
+Frame rate used to vary by up to about 35% from run to run, mostly because the Android scheduler sometimes leaves the game's busiest thread on a slower core (25 fps) and sometimes on the fastest one (34 fps); the launcher now pins that thread (`BOTW_HEAVY_CPU`). Temperature adds a few percent more.
 To compare two builds, use the same save at the same spot, let the scene settle, and average several runs.
 `perf stat -p <pid> -- sleep 15` works on the phone and shows whether you are front-end bound.
 
