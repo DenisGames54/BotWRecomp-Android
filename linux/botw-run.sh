@@ -30,4 +30,15 @@ if [ -n "$BOTW_NOIDLE" ]; then
   for c in 4 5 6 7; do for s in $C/cpu$c/cpuidle/state[1-9]*; do echo 1 > $s/disable; done; done
 fi
 
+(
+  sleep 4
+  P=$(pgrep -n BotWRecomp)
+  if [ -n "$P" ]; then
+    HEAVY_TID=$(ps -L -o tid,pcpu -p $P --sort=-pcpu | sed -n '2p' | awk '{print $1}')
+    if [ -n "$HEAVY_TID" ]; then
+      taskset -cp 7 "$HEAVY_TID" >/dev/null 2>&1
+    fi
+  fi
+) &
+
 ${CPUS:+taskset -c $CPUS} "$BIN" "$@"
