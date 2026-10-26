@@ -7,6 +7,7 @@
 #include <mutex>
 
 #include "../settings.h"
+#include "touch.h"
 
 extern float g_render_scale;  // main.cpp: the scale this run renders at
 
@@ -16,7 +17,7 @@ std::mutex g_lock;
 std::atomic<bool> g_open{false};
 int g_cursor = 0;
 
-enum RowId { kFps, kScale, kDisplay, kFilter, kGyro, kRumble, kLayout, kTouch, kShowFps, kVolume, kClose, kRows };
+enum RowId { kFps, kScale, kDisplay, kFilter, kGyro, kRumble, kLayout, kTouch, kCamSens, kEditTouch, kShowFps, kVolume, kClose, kRows };
 const float kScales[] = {0, 0.5f, 0.75f, 1, 1.5f, 2, 2.5f, 3};  // 0 = fit the display
 const char* kDisplays[] = {"Fit 16:9", "Stretch", "Fill (crop)"};
 const char* kFilters[] = {"Bilinear", "Bicubic", "Hermite", "Nearest"};
@@ -45,6 +46,7 @@ void step(Settings& s, int row, int dir) {
         case kRumble: s.rumble = !s.rumble; break;
         case kLayout: s.layout = !s.layout; break;
         case kTouch: s.touch = wrap(s.touch + dir, 3), s.touch_hidden = false; break;
+        case kCamSens: s.cam_sens = std::clamp(lroundf((s.cam_sens + dir * 0.1f) * 10) / 10.0f, 0.3f, 3.0f); break;
         case kShowFps: s.show_fps = !s.show_fps; break;
         case kVolume: s.volume = std::clamp(s.volume + dir * 10, 0, 100); break;
     }
@@ -104,6 +106,11 @@ void change(int dir) {
         row = g_cursor;
     }
     if (row == kClose) return;
+    if (row == kEditTouch) {  // runtime mode, not a Settings value: close the menu so the controls are visible
+        touch::set_edit(!touch::edit());
+        if (touch::edit()) close();
+        return;
+    }
     Settings s = settings::get();
     step(s, row, dir);
     settings::set(s);
@@ -147,6 +154,9 @@ View view() {
     v.rows[kRumble] = {"Rumble", s.rumble ? "On" : "Off"};
     v.rows[kLayout] = {"Buttons", s.layout ? "A = bottom (Cross / Xbox A)" : "A = right (Circle / Xbox B)"};
     v.rows[kTouch] = {"Touch controls", s.touch == 1 ? "On" : s.touch == 2 ? "Off" : "Auto (no controller)"};
+    snprintf(b, sizeof b, "%.1fx", s.cam_sens);
+    v.rows[kCamSens] = {"Camera sensitivity", b};
+    v.rows[kEditTouch] = {"Edit touch layout", touch::edit() ? "Editing..." : "Tap to start"};
     v.rows[kShowFps] = {"FPS counter", s.show_fps ? "On" : "Off"};
     snprintf(b, sizeof b, "%d%%", s.volume);
     v.rows[kVolume] = {"Volume", b};

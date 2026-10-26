@@ -13,12 +13,17 @@
 // deflection, smoothed), lifting the finger returns it to 0. The eye button collapses everything to itself
 // (and back); that choice is saved in settings.ini (touch_hidden).
 //
-// Test hook (headless / simulator): BOTW_TOUCH_TEST="check[:s],show[:s],menu[:s]" pushes synthetic finger
-// events with SDL_PushEvent, s seconds after the first host loop:
+// Layout editor (settings menu -> "Edit touch layout"): every control can be dragged to a new place (and the
+// floating stick's home too); the green check in the middle saves the offsets back to settings.ini
+// (touch_layout) and leaves. The game gets no touch input while editing.
+//
+// Test hook (headless / simulator): BOTW_TOUCH_TEST="check[:s],show[:s],menu[:s],hide[:s],edit[:s]" pushes
+// synthetic finger events with SDL_PushEvent, s seconds after the first host loop:
 //   check  input checks; logs "touch test: <name> ok|FAIL" with the pad state the game received
 //   show   holds stick + B + D-pad + camera finger for 30 s (screenshots), then lets go
 //   hide   taps the eye button, checks the stick is dead, taps it again, checks the stick works
 //   menu   taps the menu button, then outside the menu (closes it), then the button and the menu's X
+//   edit   enters the layout editor, drags A, checks the game is idle, taps the check, resets the layout
 #include "touch.h"
 
 #include <SDL3/SDL.h>
@@ -29,6 +34,7 @@
 #include <algorithm>
 #include <atomic>
 #include <cmath>
+#include <cstdio>
 #include <cstdlib>
 #include <cstring>
 #include <functional>
@@ -59,12 +65,17 @@ constexpr SDL_TouchID kTestTouch = 0x70C4E57;  // synthetic BOTW_TOUCH_TEST even
 std::atomic<int> g_mode{0};
 std::atomic<bool> g_controller{false};
 std::atomic<bool> g_hidden{false};
+std::atomic<bool> g_editor{false};  // layout editor on: drag controls, no game input
 #if defined(__APPLE__) && TARGET_OS_IOS
 std::atomic<bool> g_touchscreen{true};
 #else
 std::atomic<bool> g_touchscreen{false};  // Mac: Auto shows the controls once a touchscreen reports a touch
 #endif
 std::atomic<bool> g_test{false};
+
+// Controls in the order update_layout() adds them. settings.ini's touch_layout string stores one (dx, dy)
+// offset per id, in design points, relative to the default layout; the stick home is the last one.
+enum CtrlId : int { kA, kB, kX, kY, kZL, kL, kZR, kR, kMinus, kMenuBtn, kPlus, kHide, kDpad, kL3, kR3, kStickHome, kCtrlCount };
 
 enum Role : uint8_t { kCtrl, kStick, kLook };
 struct Finger {
@@ -78,12 +89,14 @@ struct Control {
     DrawItem d;
     uint32_t mask = 0;
     bool dpad = false, menu = false, toggle = false;
+    float bx = 0, by = 0;  // default center; State::off moves it
 };
 struct State {
     float w = 0, h = 0, density = 0, safe[4] = {-1, -1, -1, -1};
     float u = 1;
     std::vector<Control> ctrls;
     float home_x = 0, home_y = 0, stick_r = 0;
+    float home_bx = 0, home_by = 0;  // default stick home
     std::vector<Finger> fingers;
     bool stick = false;
     SDL_FingerID stick_id = 0;
@@ -95,11 +108,18 @@ struct State {
     uint64_t last_ns = 0;
     bool visible = false;
     input::PadState out;  // our contribution in the last apply()
+    // layout editor
+    int drag = -1;  // CtrlId being dragged, -1 = none
+    SDL_FingerID drag_id = 0;
+    float grab_dx = 0, grab_dy = 0;
+    float off[2][kCtrlCount] = {};  // design-point offsets from the default layout (settings.ini touch_layout)
+    uint32_t layout_rev = 0, laid_out_rev = 0;  // set_layout() bumps layout_rev so the next update rebuilds
+    float done_x = 0, done_y = 0, done_r = 0;   // editor finish button (screen center)
 };
-std::mutex g_lock;
+std::recursive_mutex g_lock;  // event()/test_tick() and set_edit()/set_layout() may nest
 State g;
 
-bool visible_now() { return g_test || (active() && (g_mode == 1 || g_touchscreen)); }
+bool visible_now() { return g_test || g_editor || (active() && (g_mode == 1 || g_touchscreen)); }
 
 Finger* find(SDL_FingerID id) {
     for (auto& f : g.fingers)
@@ -117,11 +137,28 @@ void add(DrawItem::Shape shape, float x, float y, float r, float hh, const char*
          bool dpad = false, bool menu = false) {
     Control c;
     c.d.shape = shape;
-    c.d.x = x, c.d.y = y, c.d.r = r, c.d.hh = hh;
+    c.d.x = c.bx = x, c.d.y = c.by = y, c.d.r = r, c.d.hh = hh;
     c.d.label = label;
     c.mask = mask;
     c.dpad = dpad, c.menu = menu;
     g.ctrls.push_back(c);
+}
+
+float clamp_axis(float v, float lo, float hi) { return lo <= hi ? std::clamp(v, lo, hi) : (lo + hi) * 0.5f; }
+
+// Put every control at its default place plus the saved offset, kept inside the safe area.
+void place_all() {
+    const float u = g.u, W = g.w, H = g.h;
+    const float L = g.safe[0], T = g.safe[1], R = W - g.safe[2], B = H - g.safe[3];
+    for (int i = 0; i < (int)g.ctrls.size() && i < kCtrlCount; i++) {
+        Control& c = g.ctrls[i];
+        const float hw = c.d.r, hh = c.d.shape == DrawItem::kPill ? c.d.hh : c.d.r;
+        c.d.x = clamp_axis(c.bx + g.off[0][i] * u, L + hw, R - hw);
+        c.d.y = clamp_axis(c.by + g.off[1][i] * u, T + hh, B - hh);
+    }
+    // the floating stick starts on the left half: keep its home ring there
+    g.home_x = clamp_axis(g.home_bx + g.off[0][kStickHome] * u, L + g.stick_r, W * 0.5f - g.stick_r);
+    g.home_y = clamp_axis(g.home_by + g.off[1][kStickHome] * u, T + g.stick_r, B - g.stick_r);
 }
 
 // Rebuild the layout when the drawable size, pixel density or safe area changes.
@@ -142,7 +179,8 @@ void update_layout() {
 #endif
     if (!(density > 0)) density = 1;
     const float W = (float)iw, H = (float)ih;
-    if (W == g.w && H == g.h && density == g.density && !memcmp(safe, g.safe, sizeof safe)) return;
+    if (W == g.w && H == g.h && density == g.density && !memcmp(safe, g.safe, sizeof safe) && g.layout_rev == g.laid_out_rev)
+        return;
     if (W <= 0 || H <= 0) return;
     release_all();
     g.w = W, g.h = H, g.density = density;
@@ -181,8 +219,12 @@ void update_layout() {
     add(DrawItem::kCircle, W * 0.5f + 122 * u, B - m - r3, r3, 0, "R3", input::BTN_STICK_R);
     // floating stick: drawn at home while idle, anywhere on the left half when touched
     g.stick_r = kStickRadius * u;
-    g.home_x = L + m + 20 * u + g.stick_r;
-    g.home_y = B - m - 14 * u - g.stick_r;
+    g.home_bx = L + m + 20 * u + g.stick_r;
+    g.home_by = B - m - 14 * u - g.stick_r;
+    // layout editor finish button: middle of the screen, only drawn/live while editing
+    g.done_x = W * 0.5f, g.done_y = H * 0.5f, g.done_r = 26 * u;
+    place_all();
+    g.laid_out_rev = g.layout_rev;
     LOG("touch: layout %.0fx%.0f px, %.2f px/pt, safe area l %.0f t %.0f r %.0f b %.0f", W, H, u, safe[0], safe[1],
         safe[2], safe[3]);
 }
@@ -253,6 +295,32 @@ input::PadState contribution(float dt) {
         }
     }
     return t;
+}
+
+// ---- layout editor ----------------------------------------------------------------------------------------
+std::string layout_spec() {
+    std::string s;
+    char b[32];
+    for (int i = 0; i < kCtrlCount; i++) {
+        snprintf(b, sizeof b, "%d,%d;", (int)lroundf(g.off[0][i]), (int)lroundf(g.off[1][i]));
+        s += b;
+    }
+    if (!s.empty()) s.pop_back();
+    return s;
+}
+
+void drag_to(float x, float y) {  // the dragged control follows the finger (the grab offset keeps it steady)
+    const float tx = x - g.grab_dx, ty = y - g.grab_dy;
+    if (g.drag == kStickHome) {
+        g.off[0][kStickHome] = (tx - g.home_bx) / g.u;
+        g.off[1][kStickHome] = (ty - g.home_by) / g.u;
+    } else if (g.drag >= 0 && g.drag < (int)g.ctrls.size()) {
+        const Control& c = g.ctrls[g.drag];
+        g.off[0][g.drag] = (tx - c.bx) / g.u;
+        g.off[1][g.drag] = (ty - c.by) / g.u;
+    }
+    g.layout_rev++;
+    update_layout();  // re-places everything, with the new position clamped inside the safe area
 }
 
 // ---- BOTW_TOUCH_TEST ------------------------------------------------------------------------------------
@@ -434,6 +502,32 @@ void plan_menu(double t0) {
     at(t0 + 3.5, [] { LOG("touch test: menu done, %d passed, %d failed", g_pass, g_fail); });
 }
 
+void plan_edit(double t0) {
+    const float u = g.u;
+    const float ax = ctrl("A").x, ay = ctrl("A").y;  // start from where A is drawn now
+    at(t0 + 0.00, [] { set_edit(true); });
+    at(t0 + 0.10, [=] { down(71, ax, ay); });
+    at(t0 + 0.20, [=] { move(71, ax - 60 * u, ay - 20 * u); });
+    at(t0 + 0.30, [] { up(71); });
+    at(t0 + 0.40, [=] {
+        const bool moved = fabsf(ctrl("A").x - (ax - 60 * u)) < 2 * u && fabsf(ctrl("A").y - (ay - 20 * u)) < 2 * u;
+        (moved ? g_pass : g_fail)++;
+        LOG("touch test: %-28s %s  A at %.0f %.0f", "edit: A dragged", moved ? "ok  " : "FAIL", ctrl("A").x / u,
+            ctrl("A").y / u);
+    });
+    at(t0 + 0.40, [] { check("edit: no game input", [](auto& s) { return !s.buttons && zero_axes(s); }); });
+    at(t0 + 0.50, [] { down(72, g.done_x, g.done_y); });  // the green check
+    at(t0 + 0.60, [] { up(72); });
+    at(t0 + 0.70, [] {
+        const bool done = !edit();
+        (done ? g_pass : g_fail)++;
+        LOG("touch test: %-28s %s", "edit: finished", done ? "ok  " : "FAIL");
+        set_layout("");  // leave the test user folder with the default layout
+        settings::set_touch_layout("");
+    });
+    at(t0 + 0.80, [] { LOG("touch test: edit done, %d passed, %d failed", g_pass, g_fail); });
+}
+
 void test_tick() {
     static bool parsed = false;
     if (!parsed && g.w > 0) {  // after the first layout
@@ -455,6 +549,7 @@ void test_tick() {
             else if (name == "show") plan_show(t < 0 ? 20 : t);
             else if (name == "hide") plan_hide(t < 0 ? 10 : t);
             else if (name == "menu") plan_menu(t < 0 ? 60 : t);
+            else if (name == "edit") plan_edit(t < 0 ? 4 : t);
         }
         LOG("touch test: \"%s\", %zu steps", spec, g_steps.size());
     }
@@ -474,16 +569,74 @@ void set_controller_connected(bool c) { g_controller = c; }
 void set_hidden(bool h) { g_hidden = h; }
 bool active() { return g_mode == 1 || (g_mode == 0 && !g_controller); }
 
+void set_edit(bool on) {
+    std::lock_guard<std::recursive_mutex> l(g_lock);
+    if (g_editor == on) return;
+    g_editor = on;
+    g.drag = -1;
+    release_all();
+    if (!on) settings::set_touch_layout(layout_spec());
+    LOG("touch: layout editor %s", on ? "on" : "off");
+}
+bool edit() { return g_editor; }
+
+void set_layout(const std::string& spec) {
+    std::lock_guard<std::recursive_mutex> l(g_lock);
+    memset(g.off, 0, sizeof g.off);
+    int moved = 0;
+    size_t pos = 0;
+    for (int i = 0; i < kCtrlCount && pos < spec.size(); i++) {
+        size_t e = spec.find(';', pos);
+        std::string pair = spec.substr(pos, e == std::string::npos ? std::string::npos : e - pos);
+        char* end = nullptr;
+        const float dx = strtof(pair.c_str(), &end);
+        if (end && *end == ',') {
+            const float dy = strtof(end + 1, nullptr);
+            if (std::isfinite(dx) && std::isfinite(dy)) g.off[0][i] = dx, g.off[1][i] = dy;
+        }
+        if (g.off[0][i] != 0 || g.off[1][i] != 0) moved++;
+        if (e == std::string::npos) break;
+        pos = e + 1;
+    }
+    g.layout_rev++;  // rebuild on the next event / apply, even when nothing else changed
+    LOG("touch: custom layout, %d control(s) moved", moved);
+}
+
 void event(const SDL_Event& e) {
     const SDL_TouchFingerEvent& f = e.tfinger;
     if (f.touchID != kTestTouch) {  // only touchscreens (not trackpads, not mouse-made touches)
         if (f.touchID == SDL_MOUSE_TOUCHID || SDL_GetTouchDeviceType(f.touchID) != SDL_TOUCH_DEVICE_DIRECT) return;
         g_touchscreen = true;
     }
-    std::lock_guard<std::mutex> l(g_lock);
+    std::lock_guard<std::recursive_mutex> l(g_lock);
     update_layout();
     if (g.w <= 0) return;
     const float x = f.x * g.w, y = f.y * g.h;
+    if (g_editor) {
+        // layout editor: one finger drags one control; the green check in the middle saves and leaves
+        if (e.type == SDL_EVENT_FINGER_DOWN) {
+            if (hypotf(x - g.done_x, y - g.done_y) <= g.done_r * 1.3f) {
+                set_edit(false);
+                return;
+            }
+            int id = hit(x, y);
+            if (id < 0 && hypotf(x - g.home_x, y - g.home_y) <= g.stick_r) id = kStickHome;
+            if (id < 0) return;
+            g.drag = id;
+            g.drag_id = f.fingerID;
+            const float cx = id == kStickHome ? g.home_x : g.ctrls[id].d.x;
+            const float cy = id == kStickHome ? g.home_y : g.ctrls[id].d.y;
+            g.grab_dx = x - cx, g.grab_dy = y - cy;
+        } else if (g.drag < 0 || f.fingerID != g.drag_id) {
+            return;
+        } else if (e.type == SDL_EVENT_FINGER_MOTION) {
+            drag_to(x, y);
+        } else {  // up / canceled
+            g.drag = -1;
+            settings::set_touch_layout(layout_spec());
+        }
+        return;
+    }
     Finger* fg = find(f.fingerID);
     if (e.type == SDL_EVENT_FINGER_DOWN) {
         // touches while the settings menu is open belong to the menu (ImGui gets them as mouse events),
@@ -536,7 +689,7 @@ void event(const SDL_Event& e) {
 }
 
 void apply(input::PadState& s) {
-    std::lock_guard<std::mutex> l(g_lock);
+    std::lock_guard<std::recursive_mutex> l(g_lock);
     update_layout();
     test_tick();
     const bool vis = visible_now() && g.w > 0;
@@ -556,7 +709,7 @@ void apply(input::PadState& s) {
         was_hidden = g_hidden;
         if (was_hidden) g.stick = g.look = false, g.vx = g.vy = 0;
     }
-    if (!vis || g_hidden) {
+    if (!vis || g_hidden || g_editor) {  // the editor owns the screen: no buttons, no sticks
         g.out = {};
         return;
     }
@@ -570,9 +723,10 @@ void apply(input::PadState& s) {
 }
 
 DrawState draw_state() {
-    std::lock_guard<std::mutex> l(g_lock);
+    std::lock_guard<std::recursive_mutex> l(g_lock);
     DrawState d;
-    d.visible = g.visible && g.w > 0;
+    const bool edit = g_editor;
+    d.visible = (g.visible || edit) && g.w > 0;
     if (!d.visible) return d;
     d.w = g.w, d.h = g.h, d.u = g.u;
     d.items.reserve(g.ctrls.size());
@@ -582,12 +736,14 @@ DrawState draw_state() {
             d.items[f.ctrl].pressed = true;
             d.items[f.ctrl].dpad |= f.dir;
         }
-    if (g_hidden) {  // just the eye button
+    if (g_hidden && !edit) {  // just the eye button
         for (size_t i = 0; i < g.ctrls.size(); i++)
             if (g.ctrls[i].toggle) d.items = {d.items[i]};
         d.collapsed = true;
         return d;
     }
+    d.edit = edit;
+    d.done_x = g.done_x, d.done_y = g.done_y, d.done_r = g.done_r;
     d.home_x = g.home_x, d.home_y = g.home_y, d.stick_r = g.stick_r;
     d.stick = g.stick;
     d.base_x = g.bx, d.base_y = g.by, d.knob_x = g.kx, d.knob_y = g.ky;

@@ -25,6 +25,8 @@ struct Settings {
     int touch = 0;         // on-screen controls: 0 auto (while no controller), 1 on, 2 off
 #endif
     bool touch_hidden = false;  // collapsed to the show/hide button (that button toggles it)
+    float cam_sens = 1;         // right stick (camera) multiplier: 0.3 .. 3.0, 1 = the game's own feel
+    std::string touch_layout;   // custom on-screen control positions (set in game by the layout editor)
 };
 
 namespace settings {
@@ -32,4 +34,6 @@ Settings get();
 void set(const Settings& s, bool save = true);  // apply to the running game (and save to settings.ini)
 void load(const std::string& path);  // and apply; missing file = defaults
 void apply();                         // push the current values into the runtime
+// Layout editor: store the new positions without calling apply() (the caller holds the touch lock).
+void set_touch_layout(const std::string& layout);
 }  // namespace settings

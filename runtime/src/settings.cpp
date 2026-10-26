@@ -1,5 +1,6 @@
 #include "settings.h"
 
+#include <algorithm>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
@@ -25,6 +26,7 @@ void save_locked() {
     fprintf(f, "# BotWRecomp settings (also editable from the in-game menu: touchpad, L3+R3 or F1)\n");
     fprintf(f, "fps=%d\nscale=%g\ndisplay=%d\nfilter=%d\ngyro=%d\nrumble=%d\nlayout=%d\nshow_fps=%d\nvolume=%d\ntouch=%d\ntouch_hidden=%d\n", g_s.fps,
             g_s.scale, g_s.display, g_s.filter, g_s.gyro, g_s.rumble, g_s.layout, g_s.show_fps, g_s.volume, g_s.touch, g_s.touch_hidden);
+    fprintf(f, "cam_sens=%g\ntouch_layout=%s\n", g_s.cam_sens, g_s.touch_layout.c_str());
     fclose(f);
 }
 }  // namespace
@@ -42,9 +44,18 @@ void apply() {
     window::set_gyro(s.gyro);
     window::set_rumble(s.rumble);
     window::set_layout(s.layout);
+    window::set_camera_sensitivity(s.cam_sens);
     audio::set_volume(s.volume / 100.0f);
     touch::set_mode(s.touch);
     touch::set_hidden(s.touch_hidden);
+    touch::set_layout(s.touch_layout);
+}
+
+void set_touch_layout(const std::string& layout) {
+    std::lock_guard<std::mutex> l(g_lock);
+    if (g_s.touch_layout == layout) return;
+    g_s.touch_layout = layout;
+    save_locked();
 }
 
 void set(const Settings& s, bool save) {
@@ -78,6 +89,8 @@ void load(const std::string& path) {
                 else if (!strcmp(line, "volume")) g_s.volume = atoi(v);
                 else if (!strcmp(line, "touch")) g_s.touch = atoi(v);
                 else if (!strcmp(line, "touch_hidden")) g_s.touch_hidden = atoi(v) != 0;
+                else if (!strcmp(line, "cam_sens")) g_s.cam_sens = std::clamp((float)atof(v), 0.3f, 3.0f);
+                else if (!strcmp(line, "touch_layout")) g_s.touch_layout = std::string(v, strcspn(v, "\r\n"));
             }
             fclose(f);
             LOG("settings: %s", path.c_str());

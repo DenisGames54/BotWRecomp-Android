@@ -16,6 +16,7 @@ void display_pixel_size(int* w, int* h);
 void set_gyro(bool on);  // controller gyro -> GamePad motion (default on)
 void set_rumble(bool on);
 void set_layout(int layout);  // 0: A = right face button (Nintendo positions), 1: A = bottom face button
+void set_camera_sensitivity(float sens);  // right stick (camera) multiplier: 0.3 .. 3.0, 1 = unchanged
 void set_script(const std::string& s);  // "F:key:NAME,F:hold:NAME:frames,F:stick:l:x:y:frames,F:quit"
 void on_frame(uint64_t frame);   // called by the renderer after each presented frame
 bool quit_requested();

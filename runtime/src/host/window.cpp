@@ -28,6 +28,7 @@ bool g_use_gyro = true;  // --no-gyro / settings
 bool g_use_rumble = true;
 bool g_background = false;  // iOS app lifecycle
 int g_layout = 0;  // 0: A = right face button (Nintendo positions), 1: A = bottom face button (labels)
+std::atomic<float> g_cam_sens{1.0f};  // right stick (camera) multiplier, settings.ini cam_sens
 std::atomic<int> g_draw_w{1280}, g_draw_h{720};
 
 // keyboard -> GamePad
@@ -174,6 +175,10 @@ void apply_input() {
             ++it;
         }
     }
+    // Camera sensitivity: scale the right stick once, after every source (keyboard, gamepad, touch, script)
+    // was merged and before clamping, so touch drags and a physical controller feel the same.
+    const float cs = g_cam_sens.load(std::memory_order_relaxed);
+    if (cs != 1.0f) s.rx *= cs, s.ry *= cs;
     s.lx = std::clamp(s.lx, -1.f, 1.f);
     s.ly = std::clamp(s.ly, -1.f, 1.f);
     s.rx = std::clamp(s.rx, -1.f, 1.f);
@@ -226,6 +231,7 @@ void set_rumble(bool on) {
     if (!on && g_pad) SDL_RumbleGamepad(g_pad, 0, 0, 0);
 }
 void set_layout(int layout) { g_layout = layout; }
+void set_camera_sensitivity(float sens) { g_cam_sens = std::clamp(sens, 0.3f, 3.0f); }
 
 void display_pixel_size(int* w, int* h) {
     *w = 2560, *h = 1440;

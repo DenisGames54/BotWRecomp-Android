@@ -18,6 +18,8 @@ struct DrawItem {
 struct DrawState {
     bool visible = false;
     bool collapsed = false;  // only the show / hide button (items has just that)
+    bool edit = false;       // layout editor: controls are draggable, done_* is the finish button
+    float done_x = 0, done_y = 0, done_r = 0;  // editor finish button (green check), layout pixels
     float w = 0, h = 0;  // layout space = drawable pixels when the layout was made
     float u = 1;         // pixels per design point
     std::vector<DrawItem> items;

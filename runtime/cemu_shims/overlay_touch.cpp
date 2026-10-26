@@ -176,5 +176,27 @@ void draw() {
         dl->AddCircle(p, 26 * u, IM_COL32(255, 255, 255, 80), 0, lw);
         dl->AddCircleFilled(p, 4 * u, IM_COL32(255, 255, 255, 110));
     }
+    if (st.edit) {
+        // layout editor: outline what can be dragged, and the green check that saves and leaves
+        const ImU32 col = IM_COL32(255, 210, 80, 220);
+        for (const DrawItem& it : st.items) {
+            const ImVec2 c = P(it.x, it.y);
+            if (it.shape == DrawItem::kPill) {
+                const float r = it.r * k, hh = it.hh * k;
+                dl->AddRect({c.x - r - 3 * u, c.y - hh - 3 * u}, {c.x + r + 3 * u, c.y + hh + 3 * u}, col, hh + 3 * u, 0, lw);
+            } else {
+                dl->AddCircle(c, it.r * k + 3 * u, col, 0, lw);
+            }
+        }
+        dl->AddCircle(P(st.home_x, st.home_y), st.stick_r * k + 3 * u, col, 0, lw);
+        const ImVec2 c = P(st.done_x, st.done_y);
+        const float r = st.done_r * k;
+        dl->AddCircleFilled(c, r, IM_COL32(32, 150, 76, 220));
+        dl->AddCircle(c, r, IM_COL32(255, 255, 255, 235), 0, lw * 1.2f);
+        dl->PathLineTo({c.x - r * 0.38f, c.y + r * 0.02f});
+        dl->PathLineTo({c.x - r * 0.08f, c.y + r * 0.32f});
+        dl->PathLineTo({c.x + r * 0.40f, c.y - r * 0.30f});
+        dl->PathStroke(IM_COL32(255, 255, 255, 245), 0, tw * 1.4f);
+    }
 }
 }  // namespace touch
