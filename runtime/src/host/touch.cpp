@@ -602,6 +602,15 @@ void set_layout(const std::string& spec) {
     LOG("touch: custom layout, %d control(s) moved", moved);
 }
 
+void reset_layout() {
+    std::lock_guard<std::recursive_mutex> l(g_lock);
+    memset(g.off, 0, sizeof g.off);
+    g.drag = -1;
+    g.layout_rev++;
+    settings::set_touch_layout("");
+    LOG("touch: layout reset to the default");
+}
+
 void event(const SDL_Event& e) {
     const SDL_TouchFingerEvent& f = e.tfinger;
     if (f.touchID != kTestTouch) {  // only touchscreens (not trackpads, not mouse-made touches)
@@ -639,10 +648,10 @@ void event(const SDL_Event& e) {
     }
     Finger* fg = find(f.fingerID);
     if (e.type == SDL_EVENT_FINGER_DOWN) {
-        // touches while the settings menu is open belong to the menu (ImGui gets them as mouse events),
-        // except a tap outside it or on its X, which closes it
+        // touches while the settings menu / back-button drawer is open belong to the menu (ImGui gets them as
+        // mouse events), except a tap outside the panel or on its X, which closes it
         if (menu::is_open()) {
-            if (menu::touch_close(f.x, f.y)) LOG("touch: settings menu closed by a tap");
+            if (menu::touch_close(f.x, f.y)) LOG("touch: menu or drawer closed by a tap");
             return;
         }
         if (fg || !g.visible) return;

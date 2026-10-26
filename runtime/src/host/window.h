@@ -20,5 +20,8 @@ void set_camera_sensitivity(float sens);  // right stick (camera) multiplier: 0.
 void set_script(const std::string& s);  // "F:key:NAME,F:hold:NAME:frames,F:stick:l:x:y:frames,F:quit"
 void on_frame(uint64_t frame);   // called by the renderer after each presented frame
 bool quit_requested();
+bool request_back();  // Android back button (UI thread): leave the layout editor / close the menu / open the drawer.
+                      // False when the host loop is not running, so the activity can fall back to its default.
+void quit();          // "Quit game" in the drawer: ends the host loop like the window close button
 SDL_Window* g_win_ptr();
 }  // namespace window

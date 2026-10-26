@@ -5,9 +5,11 @@
 #include <vector>
 
 namespace menu {
-bool is_open();
+bool is_open();   // the settings menu or the Android back-button drawer
+bool drawer_open();
 void toggle();
 void close();
+void open_drawer();  // Android back button: quick actions on the right (edit / reset the touch layout)
 void move(int dy);      // previous / next row
 void change(int dir);   // left / right on the selected row
 void activate();        // confirm button
@@ -18,6 +20,7 @@ struct Row {
 };
 struct View {
     bool open = false;
+    bool drawer = false;  // the back-button drawer (actions only) instead of the settings list
     int cursor = 0;
     std::vector<Row> rows;
     std::string note;

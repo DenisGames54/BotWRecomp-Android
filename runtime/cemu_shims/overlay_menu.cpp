@@ -73,14 +73,30 @@ void LatteOverlay_render(bool padView) {
     }
 
     menu::View v = menu::view();
-    if (!v.open) touch::draw();
+    static bool drawer_was = false;      // slide-in animation for the back-button drawer
+    static double drawer_t0 = 0;
+    static float drawer_w = 0;           // last frame's width, used to start off-screen
+    if (v.drawer && !drawer_was) drawer_t0 = ImGui::GetTime();
+    drawer_was = v.drawer;
+    if (!v.open || v.drawer) touch::draw();  // the drawer slides in over the on-screen controls
     if (!v.open) return;
-    ImGui::SetNextWindowPos({io.DisplaySize.x * 0.5f, io.DisplaySize.y * 0.5f}, ImGuiCond_Always, {0.5f, 0.5f});
-    ImGui::SetNextWindowBgAlpha(0.88f);
+    const bool drawer = v.drawer;
+    if (drawer) {
+        float sl, st, sr, sb;  // right edge, inside the safe area
+        menu::safe_area(&sl, &st, &sr, &sb);
+        const float t = std::clamp((float)((ImGui::GetTime() - drawer_t0) / 0.16), 0.0f, 1.0f);
+        const float slide = 1 - (1 - t) * (1 - t);  // ease out
+        const float x = io.DisplaySize.x - sr - 12 * ui + (1 - slide) * (drawer_w + 48 * ui);
+        ImGui::SetNextWindowPos({x, io.DisplaySize.y * 0.5f}, ImGuiCond_Always, {1.0f, 0.5f});
+        ImGui::SetNextWindowBgAlpha(0.92f);
+    } else {
+        ImGui::SetNextWindowPos({io.DisplaySize.x * 0.5f, io.DisplaySize.y * 0.5f}, ImGuiCond_Always, {0.5f, 0.5f});
+        ImGui::SetNextWindowBgAlpha(0.88f);
+    }
     if (ImGui::Begin("##menu", nullptr, overlay)) {
         ImGui::SetWindowFontScale(ui * 1.25f);
         const float label_w = 150 * ui, value_w = 230 * ui;
-        ImGui::TextUnformatted("BotWRecomp settings");
+        ImGui::TextUnformatted(drawer ? "Touch controls" : "BotWRecomp settings");
         const float xs = ImGui::GetFrameHeight();  // X in the top-right corner
         ImGui::SameLine(ImGui::GetWindowWidth() - ImGui::GetStyle().WindowPadding.x - xs);
         if (ImGui::Button("X", {xs, xs})) menu::close();
@@ -91,7 +107,8 @@ void LatteOverlay_render(bool padView) {
             ImGui::PushID(i);
             bool sel = i == v.cursor;
             if (sel) ImGui::PushStyleColor(ImGuiCol_Text, IM_COL32(255, 215, 90, 255));
-            if (ImGui::Selectable(r.label.c_str(), sel, 0, {r.action ? label_w + value_w : label_w, 0})) menu::click(i, 0);
+            const float rw = drawer ? 210 * ui : (r.action ? label_w + value_w : label_w);
+            if (ImGui::Selectable(r.label.c_str(), sel, 0, {rw, 0})) menu::click(i, 0);
             if (!r.action) {
                 ImGui::SameLine();
                 if (ImGui::ArrowButton("##l", ImGuiDir_Left)) menu::click(i, -1);
@@ -105,10 +122,12 @@ void LatteOverlay_render(bool padView) {
         }
         ImGui::Separator();
         ImGui::SetWindowFontScale(ui);
-        ImGui::TextUnformatted(v.note.c_str());
-        ImGui::TextUnformatted("D-pad: choose / change   A: select   B, touchpad, F1, X or a tap outside: close");
+        if (!v.note.empty()) ImGui::TextUnformatted(v.note.c_str());
+        ImGui::TextUnformatted(drawer ? "Back: close   A / tap: select"
+                                      : "D-pad: choose / change   A: select   B, touchpad, F1, X or a tap outside: close");
         // for touch (host side, see menu::touch_close): panel and X in fractions of the screen
         const ImVec2 wp = ImGui::GetWindowPos(), ws = ImGui::GetWindowSize(), d = io.DisplaySize;
+        if (drawer) drawer_w = ws.x;
         const float panel[4] = {wp.x / d.x, wp.y / d.y, (wp.x + ws.x) / d.x, (wp.y + ws.y) / d.y};
         const float xbtn[4] = {xa.x / d.x, xa.y / d.y, xb.x / d.x, xb.y / d.y};
         menu::set_rects(panel, xbtn);

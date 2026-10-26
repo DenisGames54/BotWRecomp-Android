@@ -22,6 +22,8 @@ namespace window {
 namespace {
 SDL_Window* g_win = nullptr;
 std::atomic<bool> g_quit{false};
+std::atomic<bool> g_running{false};  // the host loop is alive (Android back requests are accepted only then)
+std::atomic<uint32_t> g_back{0};     // Android back presses, consumed by run()
 std::atomic<uint64_t> g_frame{0};
 SDL_Gamepad* g_pad = nullptr;
 bool g_use_gyro = true;  // --no-gyro / settings
@@ -248,6 +250,13 @@ void on_frame(uint64_t f) {
 }
 SDL_Window* g_win_ptr() { return g_win; }
 bool quit_requested() { return g_quit; }
+
+bool request_back() {
+    if (!g_running) return false;
+    g_back.fetch_add(1, std::memory_order_relaxed);
+    return true;
+}
+void quit() { g_quit = true; }
 void drawable_size(int* w, int* h) {
     *w = g_draw_w;
     *h = g_draw_h;
@@ -274,7 +283,18 @@ void create() {
 void run() {
     auto t0 = SDL_GetTicks();
     update_safe_area();
+    g_running = true;
+    uint32_t back_seen = g_back.load(std::memory_order_relaxed);
     while (!g_quit) {
+        // Android back button (GameActivity -> JNI, UI thread): leave the layout editor, close whatever panel is
+        // open, or show the drawer with the touch-control actions.
+        const uint32_t back = g_back.load(std::memory_order_relaxed);
+        if (back != back_seen) {
+            back_seen = back;
+            if (touch::edit()) touch::set_edit(false);  // saves the layout
+            else if (menu::is_open()) menu::close();    // settings menu or drawer
+            else menu::open_drawer();
+        }
         SDL_Event e;
         while (SDL_PollEvent(&e)) {
             if (e.type == SDL_EVENT_QUIT) g_quit = true;
@@ -404,6 +424,7 @@ void run() {
         }
         SDL_Delay(4);
     }
+    g_running = false;
 }
 }  // namespace window
 
