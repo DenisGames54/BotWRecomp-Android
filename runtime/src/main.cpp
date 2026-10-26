@@ -21,6 +21,7 @@ extern "C" int __llvm_profile_write_file(void);
 #include "thread.h"
 #include "host/window.h"
 #include "latte/latte.h"
+#include "crash_report.h"
 
 extern "C" int g_trace_hle;
 std::string g_game_root;   // contains code/, content/, meta/
@@ -45,6 +46,7 @@ void debug_watch_init();
 
 static void on_fault(int sig, siginfo_t* si, void* uctx) {
     if (debug_watch_fault(si->si_addr, uctx)) return;
+    crash_report::dump(sig, si, uctx, (uintptr_t)g_mem, (1ull << 32) + 0x10000);
     uintptr_t a = (uintptr_t)si->si_addr, base = (uintptr_t)g_mem;
     if (a >= base && a < base + (1ull << 32) + 0x10000)
         LOG("FATAL: signal %d: guest memory access at %08x", sig, (uint32_t)(a - base));
@@ -104,10 +106,14 @@ int main(int argc, char** argv) {
     sigaction(SIGSEGV, &sa, nullptr);
     sigaction(SIGBUS, &sa, nullptr);
     sigaction(SIGILL, &sa, nullptr);
-    signal(SIGABRT, [](int) {
+    struct sigaction sa_abrt = {};
+    sa_abrt.sa_sigaction = [](int sig, siginfo_t* si, void* uctx) {
+        crash_report::dump(sig, si, uctx, (uintptr_t)g_mem, (1ull << 32) + 0x10000);
         LOG("FATAL: abort()");
         _exit(6);
-    });
+    };
+    sa_abrt.sa_flags = SA_SIGINFO | SA_ONSTACK;
+    sigaction(SIGABRT, &sa_abrt, nullptr);
 
     mem::init();
     dispatch::init();
