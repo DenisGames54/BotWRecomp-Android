@@ -144,9 +144,17 @@ bool InitializeDeviceVulkan(VkDevice device)
 
 #else
 
+#if defined(__ANDROID__)
+// Defined by the APK's native layer (native/src/android_vulkan.cpp): a private libvulkan copy running a custom GPU
+// driver (libadrenotools) when the launcher selected one, otherwise the system libvulkan. Opened once, then cached.
+extern "C" void* botw_android_open_vulkan();
+#endif
+
 void* dlopen_vulkan_loader()
 {
-#if BOOST_OS_LINUX || BOOST_OS_BSD
+#if defined(__ANDROID__)
+	void* vulkan_so = botw_android_open_vulkan();
+#elif BOOST_OS_LINUX || BOOST_OS_BSD
 	void* vulkan_so = dlopen("libvulkan.so", RTLD_NOW);
 	if(!vulkan_so)
 		vulkan_so = dlopen("libvulkan.so.1", RTLD_NOW);

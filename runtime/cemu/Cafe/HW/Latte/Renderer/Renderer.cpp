@@ -6,7 +6,7 @@
 
 #include <imgui.h>
 #include "imgui/imgui_extension.h"
-#include <png.h>
+// #include <png.h> // android: removido
 
 #include "config/ActiveSettings.h"
 

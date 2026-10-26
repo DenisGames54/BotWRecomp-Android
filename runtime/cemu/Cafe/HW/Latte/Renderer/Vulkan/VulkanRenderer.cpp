@@ -1639,6 +1639,20 @@ VkSurfaceKHR VulkanRenderer::CreateWaylandSurface(VkInstance instance, wl_displa
 VkSurfaceKHR VulkanRenderer::CreateFramebufferSurface(VkInstance instance, WindowSystem::WindowHandleInfo& windowInfo)
 {
 	VkSurfaceKHR result = VK_NULL_HANDLE;
+#if defined(__ANDROID__)
+	// The loader may be a private copy opened by libadrenotools (custom GPU driver). SDL_Vulkan_CreateSurface would use
+	// SDL's own libvulkan and mix two loaders, so create the surface through the loader that made the instance.
+	ANativeWindow* nativeWindow = (ANativeWindow*)SDL_GetPointerProperty(SDL_GetWindowProperties((SDL_Window*)windowInfo.surface), SDL_PROP_WINDOW_ANDROID_WINDOW_POINTER, nullptr);
+	if (!nativeWindow)
+		throw std::runtime_error("No ANativeWindow for the SDL window");
+	VkAndroidSurfaceCreateInfoKHR surfaceInfo{};
+	surfaceInfo.sType = VK_STRUCTURE_TYPE_ANDROID_SURFACE_CREATE_INFO_KHR;
+	surfaceInfo.window = nativeWindow;
+	VkResult err = vkCreateAndroidSurfaceKHR(instance, &surfaceInfo, nullptr, &result);
+	if (err != VK_SUCCESS)
+		throw std::runtime_error(fmt::format("vkCreateAndroidSurfaceKHR failed: {}", (sint32)err));
+	return result;
+#endif
 	if (!SDL_Vulkan_CreateSurface((SDL_Window*)windowInfo.surface, instance, nullptr, &result))
 		throw std::runtime_error("SDL_Vulkan_CreateSurface failed");
 	return result;
@@ -3072,8 +3086,13 @@ void VulkanRenderer::SwapBuffer(bool mainWindow)
 	{
 		throw std::runtime_error(fmt::format("Failed to present image: {}", result));
 	}
+#if defined(__ANDROID__)
+	if(result == VK_ERROR_OUT_OF_DATE_KHR)  // see SwapchainInfoVk::AcquireImage: SUBOPTIMAL is expected on Android
+		chainInfo.m_shouldRecreate = true;
+#else
 	if(result == VK_ERROR_OUT_OF_DATE_KHR || result == VK_SUBOPTIMAL_KHR)
 		chainInfo.m_shouldRecreate = true;
+#endif
 
 	if(result >= 0)
 	{

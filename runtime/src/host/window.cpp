@@ -250,6 +250,9 @@ void drawable_size(int* w, int* h) {
 void create() {
     if (!SDL_Init(SDL_INIT_VIDEO | SDL_INIT_GAMEPAD | SDL_INIT_EVENTS)) LOG("SDL_Init failed: %s", SDL_GetError());
     SDL_WindowFlags flags = SDL_WINDOW_RESIZABLE | SDL_WINDOW_VULKAN | SDL_WINDOW_HIGH_PIXEL_DENSITY;
+#ifdef __ANDROID__
+    flags |= SDL_WINDOW_FULLSCREEN;  // immersive: no status/navigation bar, content extends under the camera cutout
+#endif
     if (g_headless) flags |= SDL_WINDOW_HIDDEN;  // tests: render into a hidden window, never on screen
     g_win = SDL_CreateWindow("The Legend of Zelda: Breath of the Wild", 1280, 720, flags);
     int w, h;

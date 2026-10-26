@@ -229,8 +229,13 @@ bool SwapchainInfoVk::AcquireImage()
 
 	VkSemaphore acquireSemaphore = m_acquireSemaphores[m_acquireIndex];
 	VkResult result = vkAcquireNextImageKHR(m_logicalDevice, m_swapchain, 1'000'000'000, acquireSemaphore, m_imageAvailableFence, &swapchainImageIndex);
+#if defined(__ANDROID__)
+	if (result == VK_ERROR_OUT_OF_DATE_KHR)  // SUBOPTIMAL is expected while rotated (we do not pre-rotate): do not recreate every frame
+		m_shouldRecreate = true;
+#else
 	if (result == VK_ERROR_OUT_OF_DATE_KHR || result == VK_SUBOPTIMAL_KHR)
 		m_shouldRecreate = true;
+#endif
 	if (result == VK_TIMEOUT)
 	{
 		swapchainImageIndex = -1;
@@ -392,7 +397,14 @@ VkSwapchainCreateInfoKHR SwapchainInfoVk::CreateSwapchainCreateInfo(VkSurfaceKHR
 	else
 		createInfo.imageSharingMode = VK_SHARING_MODE_EXCLUSIVE;
 
+#if defined(__ANDROID__)
+	// No pre-rotation: when the device is in landscape the compositor rotates the image for us, so the renderer,
+	// ImGui and the touch overlay keep drawing upright (pre-rotating would need a rotated final blit).
+	createInfo.preTransform = (swapchainSupport.capabilities.supportedTransforms & VK_SURFACE_TRANSFORM_IDENTITY_BIT_KHR)
+		? VK_SURFACE_TRANSFORM_IDENTITY_BIT_KHR : swapchainSupport.capabilities.currentTransform;
+#else
 	createInfo.preTransform = swapchainSupport.capabilities.currentTransform;
+#endif
 	createInfo.compositeAlpha = VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR;
 	createInfo.presentMode = ChoosePresentMode(swapchainSupport.presentModes);
 	createInfo.clipped = VK_TRUE;

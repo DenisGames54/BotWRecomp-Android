@@ -138,6 +138,10 @@ VKFUNC_INSTANCE(vkCreateWaylandSurfaceKHR);
 #endif
 #endif
 
+#if defined(__ANDROID__)
+VKFUNC_INSTANCE(vkCreateAndroidSurfaceKHR);
+#endif
+
 #if BOOST_OS_WINDOWS
 VKFUNC_INSTANCE(vkCreateWin32SurfaceKHR);
 #endif

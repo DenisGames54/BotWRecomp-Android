@@ -132,6 +132,14 @@ void update_layout() {
     menu::safe_area(&safe[0], &safe[1], &safe[2], &safe[3]);
     SDL_Window* win = window::g_win_ptr();
     float density = win ? SDL_GetWindowPixelDensity(win) : 1.0f;
+#ifdef __ANDROID__
+    // SDL reports a window pixel density of 1.0 on Android (the window size is in pixels, so controls came out
+    // ~1.8x too small); the real UI density (dp) is the display content scale.
+    if (win) {
+        float cs = SDL_GetDisplayContentScale(SDL_GetDisplayForWindow(win));
+        if (cs > 0) density = cs;
+    }
+#endif
     if (!(density > 0)) density = 1;
     const float W = (float)iw, H = (float)ih;
     if (W == g.w && H == g.h && density == g.density && !memcmp(safe, g.safe, sizeof safe)) return;
